@@ -4,7 +4,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Users, UserPlus, UserCheck, MessageCircle, UserMinus, Clock, X, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -533,27 +532,18 @@ export function Friends() {
           <TabsList className="grid w-full grid-cols-3 mx-3 mt-3">
             <TabsTrigger value="friends" className="font-pixelated text-xs relative">
               Friends
-              {friends.length > 0 && (
-                <Badge variant="secondary" className="ml-2 h-4 w-4 p-0 text-xs">
-                  {friends.length}
-                </Badge>
-              )}
             </TabsTrigger>
             <TabsTrigger value="requests" className="font-pixelated text-xs relative">
               Requests
               {requests.length > 0 && (
-                <Badge variant="destructive" className="ml-2 h-4 w-4 p-0 text-xs animate-pulse">
-                  {requests.length}
-                </Badge>
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+                </span>
               )}
             </TabsTrigger>
             <TabsTrigger value="suggested" className="font-pixelated text-xs relative">
               Suggested
-              {suggested.length > 0 && (
-                <Badge variant="outline" className="ml-2 h-4 w-4 p-0 text-xs">
-                  {suggested.length}
-                </Badge>
-              )}
             </TabsTrigger>
           </TabsList>
 

@@ -22,6 +22,7 @@ import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import Vortex from "./pages/Vortex";
 
 // Components
 import { AuthGuard } from "./components/common/AuthGuard";
@@ -50,7 +51,7 @@ const App = () => {
     root.classList.add(theme);
 
     // Apply color theme
-    root.classList.remove('theme-green', 'theme-blue', 'theme-red', 'theme-orange', 'theme-purple');
+    root.classList.remove('theme-green', 'theme-blue', 'theme-red', 'theme-orange', 'theme-purple', 'theme-teal');
     if (colorTheme !== 'green') {
       root.classList.add(`theme-${colorTheme}`);
     }
@@ -167,6 +168,14 @@ const App = () => {
                 element={
                   <AuthGuard>
                     <Messages />
+                  </AuthGuard>
+                } 
+              />
+              <Route 
+                path="/vortex" 
+                element={
+                  <AuthGuard>
+                    <Vortex />
                   </AuthGuard>
                 } 
               />
