@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { supabase } from '@/integrations/supabase/client';
 
 type Theme = 'light' | 'dark' | 'win95' | 'modern';
-type ColorTheme = 'green' | 'blue' | 'red' | 'orange' | 'purple';
+type ColorTheme = 'green' | 'blue' | 'red' | 'orange' | 'purple' | 'teal';
 
 interface ThemeStore {
   theme: Theme;
@@ -25,38 +25,43 @@ const customStorage = {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         // Check if the columns exist first
-        const { data: columnsExist, error: columnsError } = await supabase.rpc('check_theme_columns_exist');
-        
-        if (columnsError || !columnsExist) {
-          console.log('Theme columns do not exist yet, using defaults');
-          return JSON.stringify({ state: { theme: 'light', colorTheme: 'green' } });
-        }
-        
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('theme_preference, color_theme')
-          .eq('id', user.id)
-          .single();
-        
-        if (error) {
-          console.error('Error fetching theme from database:', error);
-          return JSON.stringify({ state: { theme: 'light', colorTheme: 'green' } });
-        }
+        try {
+          const { data: columnsExist, error: columnsError } = await supabase.rpc('check_theme_columns_exist');
+          
+          if (columnsError || !columnsExist) {
+            console.log('Theme columns do not exist yet, using defaults');
+            return JSON.stringify({ state: { theme: 'light', colorTheme: 'green' } });
+          }
+          
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('theme_preference, color_theme')
+            .eq('id', user.id)
+            .single();
+          
+          if (error) {
+            console.error('Error fetching theme from database:', error);
+            return JSON.stringify({ state: { theme: 'light', colorTheme: 'green' } });
+          }
 
-        if (data?.theme_preference) {
-          // Save to localStorage for faster access next time
-          localStorage.setItem(name, JSON.stringify({ 
-            state: { 
-              theme: data.theme_preference,
-              colorTheme: data.color_theme || 'green'
-            } 
-          }));
-          return JSON.stringify({ 
-            state: { 
-              theme: data.theme_preference,
-              colorTheme: data.color_theme || 'green'
-            } 
-          });
+          if (data?.theme_preference) {
+            // Save to localStorage for faster access next time
+            localStorage.setItem(name, JSON.stringify({ 
+              state: { 
+                theme: data.theme_preference,
+                colorTheme: data.color_theme || 'green'
+              } 
+            }));
+            return JSON.stringify({ 
+              state: { 
+                theme: data.theme_preference,
+                colorTheme: data.color_theme || 'green'
+              } 
+            });
+          }
+        } catch (error) {
+          console.error('Error checking theme columns:', error);
+          return JSON.stringify({ state: { theme: 'light', colorTheme: 'green' } });
         }
       }
     } catch (error) {
@@ -77,21 +82,25 @@ const customStorage = {
       if (user) {
         const { theme, colorTheme } = JSON.parse(value).state;
         
-        // Check if the columns exist first
-        const { data: columnsExist, error: columnsError } = await supabase.rpc('check_theme_columns_exist');
-        
-        if (columnsError || !columnsExist) {
-          console.log('Theme columns do not exist yet, skipping database update');
-          return;
+        try {
+          // Check if the columns exist first
+          const { data: columnsExist, error: columnsError } = await supabase.rpc('check_theme_columns_exist');
+          
+          if (columnsError || !columnsExist) {
+            console.log('Theme columns do not exist yet, skipping database update');
+            return;
+          }
+          
+          await supabase
+            .from('profiles')
+            .update({ 
+              theme_preference: theme,
+              color_theme: colorTheme
+            })
+            .eq('id', user.id);
+        } catch (error) {
+          console.error('Error checking theme columns:', error);
         }
-        
-        await supabase
-          .from('profiles')
-          .update({ 
-            theme_preference: theme,
-            color_theme: colorTheme
-          })
-          .eq('id', user.id);
       }
     } catch (error) {
       console.error('Error saving theme to database:', error);
@@ -116,7 +125,7 @@ export const useTheme = create<ThemeStore>()(
       },
       setColorTheme: async (colorTheme) => {
         const root = window.document.documentElement;
-        root.classList.remove('theme-green', 'theme-blue', 'theme-red', 'theme-orange', 'theme-purple');
+        root.classList.remove('theme-green', 'theme-blue', 'theme-red', 'theme-orange', 'theme-purple', 'theme-teal');
         if (colorTheme !== 'green') {
           root.classList.add(`theme-${colorTheme}`);
         }

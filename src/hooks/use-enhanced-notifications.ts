@@ -83,13 +83,18 @@ export function useEnhancedNotifications() {
   const createSystemNotification = useCallback(async (userId: string) => {
     try {
       // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping system notification');
+      try {
+        const { error: tableCheckError } = await supabase
+          .from('notifications')
+          .select('id')
+          .limit(1);
+        
+        if (tableCheckError) {
+          console.log('Notifications table does not exist yet, skipping system notification');
+          return;
+        }
+      } catch (error) {
+        console.log('Error checking notifications table:', error);
         return;
       }
       
@@ -100,29 +105,32 @@ export function useEnhancedNotifications() {
         read: false
       };
 
-      const { data, error } = await supabase
-        .from('notifications')
-        .insert(systemNotification)
-        .select()
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .insert(systemNotification)
+          .select()
+          .single();
 
-      if (error) {
+        if (error) {
+          console.error('Error creating system notification:', error);
+          return;
+        }
+
+        // Add to local state
+        setNotifications(prev => [data, ...prev]);
+        setUnreadCount(prev => prev + 1);
+
+        // Show toast notification with highlight
+        toast({
+          title: '🎨 Customize Your Experience',
+          description: "Don't like the pixel font? Change themes in your Profile section!",
+          duration: 8000,
+          className: 'border-l-4 border-l-blue-500 bg-blue-50 text-blue-900 shadow-lg animate-pulse',
+        });
+      } catch (error) {
         console.error('Error creating system notification:', error);
-        return;
       }
-
-      // Add to local state
-      setNotifications(prev => [data, ...prev]);
-      setUnreadCount(prev => prev + 1);
-
-      // Show toast notification with highlight
-      toast({
-        title: '🎨 Customize Your Experience',
-        description: "Don't like the pixel font? Change themes in your Profile section!",
-        duration: 8000,
-        className: 'border-l-4 border-l-blue-500 bg-blue-50 text-blue-900 shadow-lg animate-pulse',
-      });
-
     } catch (error) {
       console.error('Error creating system notification:', error);
     }
@@ -132,13 +140,20 @@ export function useEnhancedNotifications() {
   const fetchNotifications = useCallback(async (userId: string) => {
     try {
       // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, using empty array');
+      try {
+        const { error: tableCheckError } = await supabase
+          .from('notifications')
+          .select('id')
+          .limit(1);
+        
+        if (tableCheckError) {
+          console.log('Notifications table does not exist yet, using empty array');
+          setNotifications([]);
+          setUnreadCount(0);
+          return;
+        }
+      } catch (error) {
+        console.log('Error checking notifications table:', error);
         setNotifications([]);
         setUnreadCount(0);
         return;
@@ -177,13 +192,18 @@ export function useEnhancedNotifications() {
   ) => {
     try {
       // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping notification creation');
+      try {
+        const { error: tableCheckError } = await supabase
+          .from('notifications')
+          .select('id')
+          .limit(1);
+        
+        if (tableCheckError) {
+          console.log('Notifications table does not exist yet, skipping notification creation');
+          return null;
+        }
+      } catch (error) {
+        console.log('Error checking notifications table:', error);
         return null;
       }
       
@@ -250,13 +270,18 @@ export function useEnhancedNotifications() {
   const markAsRead = useCallback(async (notificationId: string) => {
     try {
       // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping mark as read');
+      try {
+        const { error: tableCheckError } = await supabase
+          .from('notifications')
+          .select('id')
+          .limit(1);
+        
+        if (tableCheckError) {
+          console.log('Notifications table does not exist yet, skipping mark as read');
+          return;
+        }
+      } catch (error) {
+        console.log('Error checking notifications table:', error);
         return;
       }
       
@@ -282,13 +307,18 @@ export function useEnhancedNotifications() {
 
     try {
       // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping mark all as read');
+      try {
+        const { error: tableCheckError } = await supabase
+          .from('notifications')
+          .select('id')
+          .limit(1);
+        
+        if (tableCheckError) {
+          console.log('Notifications table does not exist yet, skipping mark all as read');
+          return;
+        }
+      } catch (error) {
+        console.log('Error checking notifications table:', error);
         return;
       }
       
@@ -311,13 +341,18 @@ export function useEnhancedNotifications() {
   const deleteNotification = useCallback(async (notificationId: string) => {
     try {
       // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping delete notification');
+      try {
+        const { error: tableCheckError } = await supabase
+          .from('notifications')
+          .select('id')
+          .limit(1);
+        
+        if (tableCheckError) {
+          console.log('Notifications table does not exist yet, skipping delete notification');
+          return;
+        }
+      } catch (error) {
+        console.log('Error checking notifications table:', error);
         return;
       }
       
@@ -346,13 +381,18 @@ export function useEnhancedNotifications() {
 
     try {
       // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping clear all notifications');
+      try {
+        const { error: tableCheckError } = await supabase
+          .from('notifications')
+          .select('id')
+          .limit(1);
+        
+        if (tableCheckError) {
+          console.log('Notifications table does not exist yet, skipping clear all notifications');
+          return;
+        }
+      } catch (error) {
+        console.log('Error checking notifications table:', error);
         return;
       }
       

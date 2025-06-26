@@ -1,5 +1,5 @@
-import React from 'react';
-import { Moon, Sun, Monitor, Palette, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Moon, Sun, Monitor, Palette, Sparkles, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -9,20 +9,25 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from '@/components/ui/badge';
 
 export function ThemeToggle() {
   const { theme, colorTheme, setTheme, setColorTheme, confirmThemeChange } = useTheme();
+  const [showNewBadge, setShowNewBadge] = useState(true);
 
   const handleThemeChange = async (newTheme: 'light' | 'dark' | 'win95' | 'modern') => {
     if (newTheme !== theme) {
       const confirmed = await confirmThemeChange(newTheme, 'theme');
       if (confirmed) {
         await setTheme(newTheme);
+        if (newTheme === 'modern') {
+          setShowNewBadge(false);
+        }
       }
     }
   };
 
-  const handleColorThemeChange = async (newColorTheme: 'green' | 'blue' | 'red' | 'orange' | 'purple') => {
+  const handleColorThemeChange = async (newColorTheme: 'green' | 'blue' | 'red' | 'orange' | 'purple' | 'teal') => {
     if (newColorTheme !== colorTheme) {
       const confirmed = await confirmThemeChange(newColorTheme, 'color');
       if (confirmed) {
@@ -68,11 +73,13 @@ export function ThemeToggle() {
           onClick={() => handleThemeChange('modern')}
           className={`h-8 w-8 ${theme === 'modern' ? 'bg-background shadow-sm border-2 border-blue-500' : ''} hover:bg-background/50 relative`}
         >
-          <Sparkles className="h-4 w-4" />
-          {theme !== 'modern' && (
-            <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+          <Smartphone className="h-4 w-4" />
+          {theme !== 'modern' && showNewBadge && (
+            <Badge className="absolute -top-2 -right-2 h-4 w-4 p-0 text-[8px] bg-blue-500 animate-pulse">
+              NEW
+            </Badge>
           )}
-          <span className="sr-only">Modern Mode</span>
+          <span className="sr-only">Modern Mobile Mode</span>
         </Button>
       </div>
 
@@ -123,6 +130,13 @@ export function ThemeToggle() {
           >
             <div className="w-3 h-3 rounded-full bg-purple-500 mr-2"></div>
             Purple Theme
+          </DropdownMenuItem>
+          <DropdownMenuItem 
+            onClick={() => handleColorThemeChange('teal')}
+            className={`font-pixelated text-xs ${colorTheme === 'teal' ? 'bg-teal-500 text-white' : ''}`}
+          >
+            <div className="w-3 h-3 rounded-full bg-teal-500 mr-2"></div>
+            Teal Theme
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

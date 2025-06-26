@@ -4,13 +4,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye } from 'lucide-react';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Smartphone, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DeleteAccountDialog } from '@/components/user/DeleteAccountDialog';
 import { useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { useTheme } from '@/hooks/use-theme';
 
 interface UserProfileData {
   id: string;
@@ -43,6 +44,7 @@ export default function UserProfile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { theme } = useTheme();
 
   useEffect(() => {
     fetchUserProfile();
@@ -172,6 +174,8 @@ export default function UserProfile() {
   };
 
   const handleSave = async () => {
+    if ((!editForm.name.trim() || !editForm.username.trim()) || isEditing) return;
+
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) return;
@@ -179,8 +183,8 @@ export default function UserProfile() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          name: editForm.name,
-          username: editForm.username,
+          name: editForm.name.trim(),
+          username: editForm.username.trim(),
         })
         .eq('id', authUser.id);
 
@@ -231,7 +235,7 @@ export default function UserProfile() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-3 p-3">
-      <Card className="card-gradient">
+      <Card className={`card-gradient ${theme === 'modern' ? 'modern-card-gradient' : ''}`}>
         <CardHeader className="text-center pb-3">
           <div className="relative inline-block">
             <Avatar 
@@ -336,20 +340,31 @@ export default function UserProfile() {
           )}
 
           {/* Theme Toggle Section */}
-          <div className="mt-4 flex justify-center">
+          <div className="mt-6 pt-4 border-t">
+            <div className="flex items-center gap-2 mb-3">
+              <Palette className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium font-pixelated">Theme Settings</span>
+            </div>
+            
             <div className="bg-background/50 p-3 rounded-lg border shadow-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <Palette className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium font-pixelated">Theme Settings</span>
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-blue-500" />
+                    <span className="text-xs font-medium font-pixelated text-blue-600">Modern Mobile Theme</span>
+                    <span className="bg-blue-100 text-blue-600 text-[8px] px-1 py-0.5 rounded font-pixelated">NEW</span>
+                  </div>
+                </div>
+                
+                <ThemeToggle />
               </div>
-              <ThemeToggle />
             </div>
           </div>
         </CardHeader>
       </Card>
 
       {/* Stats Card */}
-      <Card className="card-gradient">
+      <Card className={`card-gradient ${theme === 'modern' ? 'modern-card-gradient' : ''}`}>
         <CardContent className="p-3">
           <div className="grid grid-cols-3 gap-3 text-center">
             <div>
@@ -369,7 +384,7 @@ export default function UserProfile() {
       </Card>
 
       {/* Copyright */}
-      <Card className="card-gradient">
+      <Card className={`card-gradient ${theme === 'modern' ? 'modern-card-gradient' : ''}`}>
         <CardContent className="p-2 text-center">
           <p className="text-xs text-muted-foreground font-pixelated flex items-center justify-center gap-1">
             Developed by Mohammed Maaz with <Heart className="h-2 w-2 text-red-500" fill="currentColor" />
