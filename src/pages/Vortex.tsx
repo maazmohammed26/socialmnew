@@ -93,6 +93,7 @@ export function Vortex() {
     avatar: ''
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -126,24 +127,19 @@ export function Vortex() {
     try {
       setLoading(true);
       
-      // Try to fetch real groups from database if the table exists
-      try {
-        const { data, error } = await supabase
-          .from('groups')
-          .select('*')
-          .order('updated_at', { ascending: false });
-        
-        if (!error && data && data.length > 0) {
-          setGroups(data);
-          setLoading(false);
-          return;
-        }
-      } catch (err) {
-        console.log('Groups table may not exist yet:', err);
+      // Try to fetch real groups from database
+      const { data, error } = await supabase
+        .from('groups')
+        .select('*')
+        .order('updated_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching groups:', error);
+        setGroups([]);
+      } else {
+        setGroups(data || []);
       }
       
-      // If no real data, don't show any groups
-      setGroups([]);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching groups:', error);
@@ -159,21 +155,16 @@ export function Vortex() {
 
   const fetchGroupMembers = async (groupId: string) => {
     try {
-      // Try to fetch real group members from database if the table exists
-      try {
-        const { data, error } = await supabase
-          .rpc('get_group_members_with_profiles', { group_uuid: groupId });
-        
-        if (!error && data && data.length > 0) {
-          setGroupMembers(data);
-          return;
-        }
-      } catch (err) {
-        console.log('Group members function may not exist yet:', err);
-      }
+      // Try to fetch real group members from database
+      const { data, error } = await supabase
+        .rpc('get_group_members_with_profiles', { group_uuid: groupId });
       
-      // If no real data, set empty array
-      setGroupMembers([]);
+      if (error) {
+        console.error('Error fetching group members:', error);
+        setGroupMembers([]);
+      } else {
+        setGroupMembers(data || []);
+      }
     } catch (error) {
       console.error('Error fetching group members:', error);
       toast({
@@ -187,25 +178,20 @@ export function Vortex() {
 
   const fetchGroupMessages = async (groupId: string) => {
     try {
-      // Try to fetch real group messages from database if the table exists
-      try {
-        const { data, error } = await supabase
-          .rpc('get_group_messages_with_profiles', { 
-            group_uuid: groupId,
-            limit_count: 50,
-            offset_count: 0
-          });
-        
-        if (!error && data) {
-          setMessages(data);
-          return;
-        }
-      } catch (err) {
-        console.log('Group messages function may not exist yet:', err);
-      }
+      // Try to fetch real group messages from database
+      const { data, error } = await supabase
+        .rpc('get_group_messages_with_profiles', { 
+          group_uuid: groupId,
+          limit_count: 50,
+          offset_count: 0
+        });
       
-      // If no real data, set empty array
-      setMessages([]);
+      if (error) {
+        console.error('Error fetching group messages:', error);
+        setMessages([]);
+      } else {
+        setMessages(data || []);
+      }
     } catch (error) {
       console.error('Error fetching group messages:', error);
       toast({
@@ -234,50 +220,40 @@ export function Vortex() {
         return;
       }
       
-      // Try to create a real group if the function exists
-      try {
-        const { data, error } = await supabase
-          .rpc('create_group_with_admin', {
-            p_name: newGroupData.name.trim(),
-            p_description: newGroupData.description.trim(),
-            p_avatar: newGroupData.avatar,
-            p_is_private: newGroupData.is_private,
-            p_creator_id: currentUser.id
-          });
+      setCreatingGroup(true);
+      
+      // Create a real group using the RPC function
+      const { data, error } = await supabase
+        .rpc('create_group_with_admin', {
+          p_name: newGroupData.name.trim(),
+          p_description: newGroupData.description.trim(),
+          p_avatar: newGroupData.avatar,
+          p_is_private: true, // Always private
+          p_creator_id: currentUser.id
+        });
+      
+      if (error) {
+        console.error('Error creating group:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Failed to create group. Please try again.'
+        });
+      } else {
+        toast({
+          title: 'Group created',
+          description: 'Your group has been created successfully!'
+        });
         
-        if (!error && data) {
-          toast({
-            title: 'Group created',
-            description: 'Your group has been created successfully!'
-          });
-          
-          fetchGroups();
-          setShowCreateDialog(false);
-          setNewGroupData({
-            name: '',
-            description: '',
-            is_private: true,
-            avatar: ''
-          });
-          return;
-        }
-      } catch (err) {
-        console.log('Group creation function may not exist yet:', err);
+        fetchGroups();
+        setShowCreateDialog(false);
+        setNewGroupData({
+          name: '',
+          description: '',
+          is_private: true,
+          avatar: ''
+        });
       }
-      
-      // If function doesn't exist, show coming soon message
-      toast({
-        title: 'Coming Soon',
-        description: 'Group creation will be available in the next update!'
-      });
-      
-      setShowCreateDialog(false);
-      setNewGroupData({
-        name: '',
-        description: '',
-        is_private: true,
-        avatar: ''
-      });
     } catch (error) {
       console.error('Error creating group:', error);
       toast({
@@ -285,6 +261,8 @@ export function Vortex() {
         title: 'Error',
         description: 'Failed to create group'
       });
+    } finally {
+      setCreatingGroup(false);
     }
   };
 
@@ -292,34 +270,28 @@ export function Vortex() {
     if (!newMessage.trim() || !selectedGroup || !currentUser) return;
     
     try {
-      // Try to send a real message if the table exists
-      try {
-        const { data, error } = await supabase
-          .from('group_messages')
-          .insert({
-            group_id: selectedGroup.id,
-            sender_id: currentUser.id,
-            content: newMessage.trim(),
-            message_type: 'text'
-          })
-          .select();
-        
-        if (!error && data) {
-          // Message sent successfully
-          setNewMessage('');
-          fetchGroupMessages(selectedGroup.id);
-          return;
-        }
-      } catch (err) {
-        console.log('Group messages table may not exist yet:', err);
-      }
+      // Try to send a real message
+      const { data, error } = await supabase
+        .from('group_messages')
+        .insert({
+          group_id: selectedGroup.id,
+          sender_id: currentUser.id,
+          content: newMessage.trim(),
+          message_type: 'text'
+        })
+        .select();
       
-      // If table doesn't exist, show coming soon message
-      toast({
-        title: 'Coming Soon',
-        description: 'Messaging will be available in the next update!'
-      });
-      setNewMessage('');
+      if (error) {
+        console.error('Error sending message:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Failed to send message. Please try again.'
+        });
+      } else {
+        setNewMessage('');
+        fetchGroupMessages(selectedGroup.id);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
@@ -598,68 +570,70 @@ export function Vortex() {
                   
                   <TabsContent value="chat" className="flex-1 flex flex-col p-0 m-0">
                     {/* Messages Area */}
-                    <div className="flex-1 overflow-y-auto p-3" id="group-messages-container">
-                      {messages.length > 0 ? (
-                        <div className="space-y-4">
-                          {messages.map((message, index) => {
-                            const isCurrentUser = message.sender_id === currentUser?.id;
-                            const showDate = index === 0 || 
-                              formatDate(messages[index-1].created_at) !== formatDate(message.created_at);
-                            
-                            return (
-                              <React.Fragment key={message.id}>
-                                {showDate && (
-                                  <div className="flex justify-center my-2">
-                                    <Badge variant="outline" className="font-pixelated text-xs">
-                                      {formatDate(message.created_at)}
-                                    </Badge>
-                                  </div>
-                                )}
-                                <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
-                                  <div className={`flex gap-2 max-w-[80%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                    <Avatar className="h-8 w-8 mt-1">
-                                      {message.sender_avatar ? (
-                                        <AvatarImage src={message.sender_avatar} />
-                                      ) : (
-                                        <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                                          {message.sender_name.substring(0, 2).toUpperCase()}
-                                        </AvatarFallback>
-                                      )}
-                                    </Avatar>
-                                    <div className="space-y-1">
-                                      <div className="flex items-center gap-2">
-                                        <p className="text-xs font-pixelated font-medium">
-                                          {isCurrentUser ? 'You' : message.sender_name}
-                                        </p>
-                                        <span className="text-xs text-muted-foreground font-pixelated">
-                                          {formatTime(message.created_at)}
-                                        </span>
-                                      </div>
-                                      <div className={`p-3 rounded-lg ${
-                                        isCurrentUser 
-                                          ? 'bg-social-green text-white' 
-                                          : 'bg-muted'
-                                      }`}>
-                                        <p className="text-sm font-pixelated whitespace-pre-wrap break-words">
-                                          {message.content}
-                                        </p>
+                    <div className="flex-1 overflow-hidden">
+                      <ScrollArea className="h-full scroll-smooth">
+                        <div className="p-3 space-y-4">
+                          {messages.length > 0 ? (
+                            messages.map((message, index) => {
+                              const isCurrentUser = message.sender_id === currentUser?.id;
+                              const showDate = index === 0 || 
+                                formatDate(messages[index-1].created_at) !== formatDate(message.created_at);
+                              
+                              return (
+                                <React.Fragment key={message.id}>
+                                  {showDate && (
+                                    <div className="flex justify-center my-2">
+                                      <Badge variant="outline" className="font-pixelated text-xs">
+                                        {formatDate(message.created_at)}
+                                      </Badge>
+                                    </div>
+                                  )}
+                                  <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`flex gap-2 max-w-[80%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+                                      <Avatar className="h-8 w-8 mt-1">
+                                        {message.sender_avatar ? (
+                                          <AvatarImage src={message.sender_avatar} />
+                                        ) : (
+                                          <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
+                                            {message.sender_name.substring(0, 2).toUpperCase()}
+                                          </AvatarFallback>
+                                        )}
+                                      </Avatar>
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                          <p className="text-xs font-pixelated font-medium">
+                                            {isCurrentUser ? 'You' : message.sender_name}
+                                          </p>
+                                          <span className="text-xs text-muted-foreground font-pixelated">
+                                            {formatTime(message.created_at)}
+                                          </span>
+                                        </div>
+                                        <div className={`p-3 rounded-lg ${
+                                          isCurrentUser 
+                                            ? 'bg-social-green text-white' 
+                                            : 'bg-muted'
+                                        }`}>
+                                          <p className="text-sm font-pixelated whitespace-pre-wrap break-words">
+                                            {message.content}
+                                          </p>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
-                                </div>
-                              </React.Fragment>
-                            );
-                          })}
+                                </React.Fragment>
+                              );
+                            })
+                          ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-center">
+                              <MessageSquare className="h-16 w-16 text-muted-foreground mb-4" />
+                              <h3 className="font-pixelated text-sm font-medium mb-2">No messages yet</h3>
+                              <p className="font-pixelated text-xs text-muted-foreground max-w-sm">
+                                Be the first to send a message in this group!
+                              </p>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-center">
-                          <MessageSquare className="h-16 w-16 text-muted-foreground mb-4" />
-                          <h3 className="font-pixelated text-sm font-medium mb-2">No messages yet</h3>
-                          <p className="font-pixelated text-xs text-muted-foreground max-w-sm">
-                            Be the first to send a message in this group!
-                          </p>
-                        </div>
-                      )}
+                      </ScrollArea>
                     </div>
                     
                     {/* Message Input */}
@@ -788,18 +762,6 @@ export function Vortex() {
                     </CardContent>
                   </Card>
                 </div>
-                
-                <div className="bg-muted/30 p-4 rounded-lg max-w-md">
-                  <div className="flex items-start gap-3">
-                    <Info className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    <div>
-                      <h3 className="font-pixelated text-sm font-medium mb-1">Coming Soon</h3>
-                      <p className="font-pixelated text-xs text-muted-foreground">
-                        Vortex Groups is a new feature currently in development. Stay tuned for updates as we roll out more functionality!
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -852,14 +814,16 @@ export function Vortex() {
               variant="outline"
               onClick={() => setShowCreateDialog(false)}
               className="font-pixelated text-xs"
+              disabled={creatingGroup}
             >
               Cancel
             </Button>
             <Button
               onClick={handleCreateGroup}
               className="font-pixelated text-xs"
+              disabled={!newGroupData.name.trim() || creatingGroup}
             >
-              Create Group
+              {creatingGroup ? 'Creating...' : 'Create Group'}
             </Button>
           </DialogFooter>
         </DialogContent>

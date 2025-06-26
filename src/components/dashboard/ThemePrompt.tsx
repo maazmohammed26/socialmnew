@@ -33,8 +33,8 @@ export function ThemePrompt() {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-20 z-50 flex justify-center px-4">
-      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-lg border animate-fade-in">
+    <div className="fixed inset-x-0 bottom-20 z-50 flex justify-center px-4 pointer-events-none">
+      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-lg border animate-fade-in pointer-events-auto">
         <div className="p-4">
           <div className="flex items-start justify-between mb-3">
             <h3 className="font-pixelated text-sm font-medium">Try Our New Themes</h3>
