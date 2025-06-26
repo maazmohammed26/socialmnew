@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -355,8 +354,50 @@ export function Vortex() {
 
   const filteredGroups = groups.filter(group => 
     group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    group.description.toLowerCase().includes(searchQuery.toLowerCase())
+    group.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Set up real-time subscriptions for groups and messages
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Subscribe to group changes
+    const groupsChannel = supabase
+      .channel('groups-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'groups' }, 
+        () => {
+          fetchGroups();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to group messages if a group is selected
+    let messagesChannel: any;
+    if (selectedGroup) {
+      messagesChannel = supabase
+        .channel(`group-messages-${selectedGroup.id}`)
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'group_messages',
+            filter: `group_id=eq.${selectedGroup.id}`
+          }, 
+          () => {
+            fetchGroupMessages(selectedGroup.id);
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      supabase.removeChannel(groupsChannel);
+      if (messagesChannel) {
+        supabase.removeChannel(messagesChannel);
+      }
+    };
+  }, [currentUser, selectedGroup]);
 
   return (
     <DashboardLayout>
@@ -626,7 +667,7 @@ export function Vortex() {
                     
                     {/* Message Input */}
                     <div className="p-3 border-t">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-end">
                         <Textarea
                           placeholder="Type a message..."
                           value={newMessage}
@@ -639,25 +680,17 @@ export function Vortex() {
                             }
                           }}
                         />
-                        <div className="flex flex-col gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                          >
-                            <ImageIcon className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            onClick={handleSendMessage}
-                            disabled={!newMessage.trim()}
-                            size="icon"
-                            className="h-8 w-8 bg-social-green hover:bg-social-light-green text-white"
-                          >
-                            <Send className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <Button
+                          onClick={handleSendMessage}
+                          disabled={!newMessage.trim()}
+                          className="bg-social-green hover:bg-social-light-green text-white flex-shrink-0 h-[60px] w-12"
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
                       </div>
+                      <p className="text-xs text-muted-foreground font-pixelated mt-1">
+                        Press Enter to send, Shift + Enter for new line
+                      </p>
                     </div>
                   </TabsContent>
                   
@@ -782,7 +815,7 @@ export function Vortex() {
           <DialogHeader>
             <DialogTitle className="font-pixelated">Create New Group</DialogTitle>
             <DialogDescription className="font-pixelated text-xs">
-              Create a group to chat with multiple people at once.
+              Create a private group to chat with multiple people at once.
             </DialogDescription>
           </DialogHeader>
           
@@ -807,39 +840,11 @@ export function Vortex() {
               />
             </div>
             
-            <div className="flex items-center gap-2">
-              <label className="font-pixelated text-xs">Privacy:</label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={newGroupData.is_private ? "default" : "outline"}
-                  onClick={() => setNewGroupData({...newGroupData, is_private: true})}
-                  className="font-pixelated text-xs h-8"
-                >
-                  <Lock className="h-3 w-3 mr-1" />
-                  Private
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={!newGroupData.is_private ? "default" : "outline"}
-                  onClick={() => setNewGroupData({...newGroupData, is_private: false})}
-                  className="font-pixelated text-xs h-8"
-                >
-                  <Globe className="h-3 w-3 mr-1" />
-                  Public
-                </Button>
-              </div>
-            </div>
-            
             <div className="bg-muted/30 p-3 rounded-lg">
               <div className="flex items-start gap-2">
                 <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <p className="font-pixelated text-xs text-muted-foreground">
-                  {newGroupData.is_private 
-                    ? "Private groups are only visible to members and require an invitation to join."
-                    : "Public groups can be discovered and joined by anyone."}
+                  Private groups are only visible to members and require an invitation to join.
                 </p>
               </div>
             </div>
