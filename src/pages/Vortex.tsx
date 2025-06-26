@@ -24,7 +24,11 @@ import {
   Lock,
   Globe,
   ChevronRight,
-  User
+  User,
+  Loader2,
+  AlertTriangle,
+  Check,
+  Trash2
 } from 'lucide-react';
 import {
   Dialog,
@@ -40,6 +44,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   collection, 
   addDoc, 
@@ -54,7 +68,8 @@ import {
   getDoc,
   setDoc,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 
@@ -110,22 +125,44 @@ export function Vortex() {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [showDeleteGroupDialog, setShowDeleteGroupDialog] = useState(false);
+  const [showLeaveGroupDialog, setShowLeaveGroupDialog] = useState(false);
+  const [groupNameExists, setGroupNameExists] = useState(false);
+  const [checkingGroupName, setCheckingGroupName] = useState(false);
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch current user
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
+        
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
             
+        if (profile) {
           setCurrentUser({ ...user, ...profile });
+          
+          // Create user profile in Firebase if it doesn't exist
+          const userProfileRef = doc(db, 'userProfiles', user.id);
+          const userProfileDoc = await getDoc(userProfileRef);
+          
+          if (!userProfileDoc.exists()) {
+            await setDoc(userProfileRef, {
+              name: profile.name || 'User',
+              username: profile.username || 'user',
+              avatar: profile.avatar || null,
+              createdAt: serverTimestamp()
+            });
+          }
         }
       } catch (error) {
         console.error('Error fetching current user:', error);
@@ -164,15 +201,21 @@ export function Vortex() {
       const newMessages: Message[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
+        
+        // Convert Firebase timestamp to Date
+        const createdAt = data.createdAt ? 
+          (typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : data.createdAt) : 
+          new Date();
+          
         newMessages.push({
           id: doc.id,
           senderId: data.senderId,
           content: data.content,
           messageType: data.messageType || 'text',
-          createdAt: data.createdAt,
-          senderName: data.senderName,
-          senderUsername: data.senderUsername,
-          senderAvatar: data.senderAvatar
+          createdAt: createdAt,
+          senderName: data.senderName || 'Unknown',
+          senderUsername: data.senderUsername || 'unknown',
+          senderAvatar: data.senderAvatar || null
         });
       });
       
@@ -186,6 +229,35 @@ export function Vortex() {
       unsubscribe();
     };
   }, [selectedGroup, currentUser]);
+
+  // Check if group name exists when typing
+  useEffect(() => {
+    const checkGroupName = async () => {
+      if (!newGroupData.name.trim()) {
+        setGroupNameExists(false);
+        return;
+      }
+      
+      setCheckingGroupName(true);
+      
+      try {
+        const groupsQuery = query(
+          collection(db, 'groups'),
+          where('name', '==', newGroupData.name.trim())
+        );
+        
+        const snapshot = await getDocs(groupsQuery);
+        setGroupNameExists(!snapshot.empty);
+      } catch (error) {
+        console.error('Error checking group name:', error);
+      } finally {
+        setCheckingGroupName(false);
+      }
+    };
+    
+    const timeoutId = setTimeout(checkGroupName, 500);
+    return () => clearTimeout(timeoutId);
+  }, [newGroupData.name]);
 
   const fetchGroups = async () => {
     try {
@@ -214,6 +286,20 @@ export function Vortex() {
         
         if (groupDoc.exists()) {
           const data = groupDoc.data();
+          
+          // Convert timestamps to Date objects
+          const createdAt = data.createdAt ? 
+            (typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : data.createdAt) : 
+            new Date();
+            
+          const updatedAt = data.updatedAt ? 
+            (typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate() : data.updatedAt) : 
+            new Date();
+            
+          const lastMessageTime = data.lastMessageTime ? 
+            (typeof data.lastMessageTime.toDate === 'function' ? data.lastMessageTime.toDate() : data.lastMessageTime) : 
+            null;
+            
           groupsData.push({
             id: groupDoc.id,
             name: data.name,
@@ -221,20 +307,22 @@ export function Vortex() {
             avatar: data.avatar || null,
             isPrivate: data.isPrivate,
             createdBy: data.createdBy,
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
             memberCount: data.memberCount || 1,
             maxMembers: data.maxMembers || 100,
             lastMessage: data.lastMessage || '',
-            lastMessageTime: data.lastMessageTime
+            lastMessageTime: lastMessageTime
           });
         }
       }
       
       // Sort by last activity
       groupsData.sort((a, b) => {
-        const timeA = a.updatedAt ? a.updatedAt.toDate().getTime() : 0;
-        const timeB = b.updatedAt ? b.updatedAt.toDate().getTime() : 0;
+        const timeA = a.lastMessageTime ? a.lastMessageTime.getTime() : 
+                     a.updatedAt ? a.updatedAt.getTime() : 0;
+        const timeB = b.lastMessageTime ? b.lastMessageTime.getTime() : 
+                     b.updatedAt ? b.updatedAt.getTime() : 0;
         return timeB - timeA;
       });
       
@@ -264,18 +352,23 @@ export function Vortex() {
       for (const memberDoc of membersSnapshot.docs) {
         const data = memberDoc.data();
         
-        // Get user profile data
+        // Get user profile data from Supabase
         const { data: userProfile } = await supabase
           .from('profiles')
           .select('name, username, avatar')
           .eq('id', data.userId)
           .single();
         
+        // Convert timestamp to Date
+        const joinedAt = data.joinedAt ? 
+          (typeof data.joinedAt.toDate === 'function' ? data.joinedAt.toDate() : data.joinedAt) : 
+          new Date();
+        
         membersData.push({
           id: memberDoc.id,
           userId: data.userId,
           role: data.role,
-          joinedAt: data.joinedAt,
+          joinedAt: joinedAt,
           name: userProfile?.name || 'Unknown User',
           username: userProfile?.username || 'unknown',
           avatar: userProfile?.avatar || null
@@ -287,8 +380,8 @@ export function Vortex() {
         if (a.role === 'admin' && b.role !== 'admin') return -1;
         if (a.role !== 'admin' && b.role === 'admin') return 1;
         
-        const timeA = a.joinedAt ? a.joinedAt.toDate().getTime() : 0;
-        const timeB = b.joinedAt ? b.joinedAt.toDate().getTime() : 0;
+        const timeA = a.joinedAt ? a.joinedAt.getTime() : 0;
+        const timeB = b.joinedAt ? b.joinedAt.getTime() : 0;
         return timeA - timeB;
       });
       
@@ -305,10 +398,21 @@ export function Vortex() {
 
   const handleSelectGroup = (group: Group) => {
     setSelectedGroup(group);
+    setMessages([]);
   };
 
   const handleCreateGroup = async () => {
     if (!newGroupData.name.trim() || !currentUser) return;
+    
+    // Check if group name already exists
+    if (groupNameExists) {
+      toast({
+        variant: 'destructive',
+        title: 'Group name already exists',
+        description: 'Please choose a different name for your group'
+      });
+      return;
+    }
     
     try {
       setCreatingGroup(true);
@@ -376,8 +480,8 @@ export function Vortex() {
         avatar: newGroupData.avatar || null,
         isPrivate: true,
         createdBy: currentUser.id,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
         memberCount: 1,
         maxMembers: 100
       };
@@ -397,11 +501,13 @@ export function Vortex() {
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedGroup || !currentUser) return;
+    if (!newMessage.trim() || !selectedGroup || !currentUser || sendingMessage) return;
     
     try {
+      setSendingMessage(true);
+      
       // Add message to Firestore
-      await addDoc(collection(db, 'groupMessages'), {
+      const messageData = {
         groupId: selectedGroup.id,
         senderId: currentUser.id,
         content: newMessage.trim(),
@@ -410,7 +516,9 @@ export function Vortex() {
         senderName: currentUser.name,
         senderUsername: currentUser.username,
         senderAvatar: currentUser.avatar
-      });
+      };
+
+      const messageRef = await addDoc(collection(db, 'groupMessages'), messageData);
       
       // Update group's last message and time
       await updateDoc(doc(db, 'groups', selectedGroup.id), {
@@ -425,7 +533,7 @@ export function Vortex() {
       // Store in local storage for offline access
       const localMessages = JSON.parse(localStorage.getItem(`group_messages_${selectedGroup.id}`) || '[]');
       localMessages.push({
-        id: Date.now().toString(),
+        id: messageRef.id,
         senderId: currentUser.id,
         content: newMessage.trim(),
         messageType: 'text',
@@ -466,20 +574,137 @@ export function Vortex() {
       }]);
       
       setNewMessage('');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!selectedGroup || !currentUser || selectedGroup.createdBy !== currentUser.id) return;
+    
+    try {
+      // Delete all group messages
+      const messagesQuery = query(
+        collection(db, 'groupMessages'),
+        where('groupId', '==', selectedGroup.id)
+      );
+      
+      const messagesSnapshot = await getDocs(messagesQuery);
+      const deleteMessagePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deleteMessagePromises);
+      
+      // Delete all group members
+      const membersQuery = query(
+        collection(db, 'groupMembers'),
+        where('groupId', '==', selectedGroup.id)
+      );
+      
+      const membersSnapshot = await getDocs(membersQuery);
+      const deleteMemberPromises = membersSnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deleteMemberPromises);
+      
+      // Delete the group
+      await deleteDoc(doc(db, 'groups', selectedGroup.id));
+      
+      toast({
+        title: 'Group deleted',
+        description: 'The group has been permanently deleted'
+      });
+      
+      // Update UI
+      setGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
+      setSelectedGroup(null);
+      setShowDeleteGroupDialog(false);
+      
+    } catch (error) {
+      console.error('Error deleting group:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to delete group'
+      });
+    }
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!selectedGroup || !currentUser) return;
+    
+    try {
+      // Find the member document
+      const membersQuery = query(
+        collection(db, 'groupMembers'),
+        where('groupId', '==', selectedGroup.id),
+        where('userId', '==', currentUser.id)
+      );
+      
+      const membersSnapshot = await getDocs(membersQuery);
+      
+      if (membersSnapshot.empty) {
+        throw new Error('Member not found');
+      }
+      
+      // Check if user is the only admin
+      if (selectedGroup.createdBy === currentUser.id) {
+        // Count other admins
+        const adminsQuery = query(
+          collection(db, 'groupMembers'),
+          where('groupId', '==', selectedGroup.id),
+          where('role', '==', 'admin')
+        );
+        
+        const adminsSnapshot = await getDocs(adminsQuery);
+        const otherAdmins = adminsSnapshot.docs.filter(doc => doc.data().userId !== currentUser.id);
+        
+        if (otherAdmins.length === 0) {
+          toast({
+            variant: 'destructive',
+            title: 'Cannot leave group',
+            description: 'You are the only admin. Please delete the group or make someone else an admin first.'
+          });
+          setShowLeaveGroupDialog(false);
+          return;
+        }
+      }
+      
+      // Delete the member document
+      await deleteDoc(membersSnapshot.docs[0].ref);
+      
+      // Update group member count
+      await updateDoc(doc(db, 'groups', selectedGroup.id), {
+        memberCount: selectedGroup.memberCount - 1
+      });
+      
+      toast({
+        title: 'Left group',
+        description: 'You have left the group successfully'
+      });
+      
+      // Update UI
+      setGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
+      setSelectedGroup(null);
+      setShowLeaveGroupDialog(false);
+      
+    } catch (error) {
+      console.error('Error leaving group:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to leave group'
+      });
     }
   };
 
   const formatMessageTime = (dateString: any) => {
     if (!dateString) return '';
     
-    const date = dateString.toDate ? dateString.toDate() : new Date(dateString);
+    const date = dateString instanceof Date ? dateString : new Date(dateString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const formatDate = (dateString: any) => {
     if (!dateString) return 'Today';
     
-    const date = dateString.toDate ? dateString.toDate() : new Date(dateString);
+    const date = dateString instanceof Date ? dateString : new Date(dateString);
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -507,6 +732,28 @@ export function Vortex() {
   const filteredGroups = groups.filter(group => 
     group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     group.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Group messages by date for better display
+  const groupedMessages = React.useMemo(() => {
+    const groups: { [key: string]: Message[] } = {};
+    
+    messages.forEach(message => {
+      const date = formatDate(message.createdAt);
+      if (!groups[date]) {
+        groups[date] = [];
+      }
+      groups[date].push(message);
+    });
+    
+    return Object.entries(groups).map(([date, messages]) => ({
+      date,
+      messages
+    }));
+  }, [messages]);
+
+  const isCurrentUserAdmin = selectedGroup && groupMembers.some(
+    member => member.userId === currentUser?.id && member.role === 'admin'
   );
 
   return (
@@ -673,18 +920,34 @@ export function Vortex() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="font-pixelated text-xs cursor-pointer">
+                      <DropdownMenuItem 
+                        className="font-pixelated text-xs cursor-pointer"
+                        onClick={() => {}}
+                        disabled
+                      >
                         <Users className="h-4 w-4 mr-2" />
                         View Members
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="font-pixelated text-xs cursor-pointer">
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Invite People
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="font-pixelated text-xs cursor-pointer">
-                        <Settings className="h-4 w-4 mr-2" />
-                        Group Settings
-                      </DropdownMenuItem>
+                      
+                      {selectedGroup.createdBy === currentUser?.id && (
+                        <DropdownMenuItem 
+                          className="font-pixelated text-xs cursor-pointer text-destructive"
+                          onClick={() => setShowDeleteGroupDialog(true)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Group
+                        </DropdownMenuItem>
+                      )}
+                      
+                      {selectedGroup.createdBy !== currentUser?.id && (
+                        <DropdownMenuItem 
+                          className="font-pixelated text-xs cursor-pointer text-destructive"
+                          onClick={() => setShowLeaveGroupDialog(true)}
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Leave Group
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -711,59 +974,66 @@ export function Vortex() {
                   <TabsContent value="chat" className="flex-1 flex flex-col p-0 m-0">
                     {/* Messages Area */}
                     <div className="flex-1 overflow-hidden">
-                      <ScrollArea className="h-full scroll-smooth">
+                      <ScrollArea 
+                        ref={messagesContainerRef}
+                        className="h-full scroll-smooth"
+                      >
                         <div className="p-3 space-y-4">
-                          {messages.length > 0 ? (
+                          {groupedMessages.length > 0 ? (
                             <>
-                              {messages.map((message, index) => {
-                                const isCurrentUser = message.senderId === currentUser?.id;
-                                const showDate = index === 0 || 
-                                  formatDate(messages[index-1].createdAt) !== formatDate(message.createdAt);
-                                
-                                return (
-                                  <React.Fragment key={message.id}>
-                                    {showDate && (
-                                      <div className="flex justify-center my-2">
-                                        <Badge variant="outline" className="font-pixelated text-xs">
-                                          {getDateSeparatorText(formatDate(message.createdAt))}
-                                        </Badge>
-                                      </div>
-                                    )}
-                                    <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
-                                      <div className={`flex gap-2 max-w-[80%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                        <Avatar className="h-8 w-8 mt-1">
-                                          {message.senderAvatar ? (
-                                            <AvatarImage src={message.senderAvatar} />
-                                          ) : (
-                                            <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                                              {message.senderName.substring(0, 2).toUpperCase()}
-                                            </AvatarFallback>
-                                          )}
-                                        </Avatar>
-                                        <div className="space-y-1">
-                                          <div className="flex items-center gap-2">
-                                            <p className="text-xs font-pixelated font-medium">
-                                              {isCurrentUser ? 'You' : message.senderName}
-                                            </p>
-                                            <span className="text-xs text-muted-foreground font-pixelated">
-                                              {formatMessageTime(message.createdAt)}
-                                            </span>
-                                          </div>
-                                          <div className={`p-3 rounded-lg ${
-                                            isCurrentUser 
-                                              ? 'bg-social-green text-white' 
-                                              : 'bg-muted'
-                                          }`}>
-                                            <p className="text-sm font-pixelated whitespace-pre-wrap break-words">
-                                              {message.content}
-                                            </p>
+                              {groupedMessages.map((group, groupIndex) => (
+                                <div key={groupIndex} className="space-y-2">
+                                  {/* Date Separator */}
+                                  <div className="flex justify-center my-2">
+                                    <Badge variant="outline" className="font-pixelated text-xs">
+                                      {getDateSeparatorText(group.date)}
+                                    </Badge>
+                                  </div>
+                                  
+                                  {/* Messages for this date */}
+                                  {group.messages.map((message) => {
+                                    const isCurrentUser = message.senderId === currentUser?.id;
+                                    
+                                    return (
+                                      <div 
+                                        key={message.id}
+                                        className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
+                                      >
+                                        <div className={`flex gap-2 max-w-[80%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+                                          <Avatar className="h-8 w-8 mt-1">
+                                            {message.senderAvatar ? (
+                                              <AvatarImage src={message.senderAvatar} />
+                                            ) : (
+                                              <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
+                                                {message.senderName.substring(0, 2).toUpperCase()}
+                                              </AvatarFallback>
+                                            )}
+                                          </Avatar>
+                                          <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-xs font-pixelated font-medium">
+                                                {isCurrentUser ? 'You' : message.senderName}
+                                              </p>
+                                              <span className="text-xs text-muted-foreground font-pixelated">
+                                                {formatMessageTime(message.createdAt)}
+                                              </span>
+                                            </div>
+                                            <div className={`p-3 rounded-lg ${
+                                              isCurrentUser 
+                                                ? 'bg-social-green text-white' 
+                                                : 'bg-muted'
+                                            }`}>
+                                              <p className="text-sm font-pixelated whitespace-pre-wrap break-words">
+                                                {message.content}
+                                              </p>
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
-                                    </div>
-                                  </React.Fragment>
-                                );
-                              })}
+                                    );
+                                  })}
+                                </div>
+                              ))}
                               <div ref={messagesEndRef} />
                             </>
                           ) : (
@@ -793,13 +1063,18 @@ export function Vortex() {
                               handleSendMessage();
                             }
                           }}
+                          disabled={sendingMessage}
                         />
                         <Button
                           onClick={handleSendMessage}
-                          disabled={!newMessage.trim()}
+                          disabled={!newMessage.trim() || sendingMessage}
                           className="bg-social-green hover:bg-social-light-green text-white flex-shrink-0 h-[60px] w-12"
                         >
-                          <Send className="h-4 w-4" />
+                          {sendingMessage ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground font-pixelated mt-1">
@@ -812,7 +1087,11 @@ export function Vortex() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <h3 className="font-pixelated text-sm font-medium">Members ({groupMembers.length})</h3>
-                        <Button size="sm" className="h-8 font-pixelated text-xs">
+                        <Button 
+                          size="sm" 
+                          className="h-8 font-pixelated text-xs"
+                          disabled
+                        >
                           <UserPlus className="h-3 w-3 mr-1" />
                           Invite
                         </Button>
@@ -899,6 +1178,7 @@ export function Vortex() {
                       <Button 
                         variant="outline"
                         className="w-full font-pixelated text-xs"
+                        disabled
                       >
                         Browse Groups
                       </Button>
@@ -924,12 +1204,34 @@ export function Vortex() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label className="font-pixelated text-xs">Group Name</label>
-              <Input
-                placeholder="Enter group name"
-                value={newGroupData.name}
-                onChange={(e) => setNewGroupData({...newGroupData, name: e.target.value})}
-                className="font-pixelated text-xs"
-              />
+              <div className="relative">
+                <Input
+                  placeholder="Enter group name"
+                  value={newGroupData.name}
+                  onChange={(e) => setNewGroupData({...newGroupData, name: e.target.value})}
+                  className={`font-pixelated text-xs ${groupNameExists ? 'border-red-500' : ''}`}
+                />
+                {checkingGroupName && (
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+                {groupNameExists && !checkingGroupName && (
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                  </div>
+                )}
+                {!groupNameExists && newGroupData.name.trim() && !checkingGroupName && (
+                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                    <Check className="h-4 w-4 text-green-500" />
+                  </div>
+                )}
+              </div>
+              {groupNameExists && (
+                <p className="text-xs text-red-500 font-pixelated">
+                  This group name already exists. Please choose another name.
+                </p>
+              )}
             </div>
             
             <div className="space-y-2">
@@ -964,13 +1266,62 @@ export function Vortex() {
             <Button
               onClick={handleCreateGroup}
               className="font-pixelated text-xs"
-              disabled={!newGroupData.name.trim() || creatingGroup}
+              disabled={!newGroupData.name.trim() || creatingGroup || groupNameExists || checkingGroupName}
             >
-              {creatingGroup ? 'Creating...' : 'Create Group'}
+              {creatingGroup ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Create Group'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Group Confirmation Dialog */}
+      <AlertDialog open={showDeleteGroupDialog} onOpenChange={setShowDeleteGroupDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-pixelated">Delete Group</AlertDialogTitle>
+            <AlertDialogDescription className="font-pixelated text-xs">
+              Are you sure you want to delete this group? This action cannot be undone and all messages will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="font-pixelated text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteGroup}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
+            >
+              Delete Group
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Leave Group Confirmation Dialog */}
+      <AlertDialog open={showLeaveGroupDialog} onOpenChange={setShowLeaveGroupDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-pixelated">Leave Group</AlertDialogTitle>
+            <AlertDialogDescription className="font-pixelated text-xs">
+              Are you sure you want to leave this group? You'll need to be invited back to rejoin.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="font-pixelated text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLeaveGroup}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
+            >
+              Leave Group
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }
