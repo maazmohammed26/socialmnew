@@ -22,7 +22,8 @@ import {
   Trash2, 
   Settings,
   Info,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { 
@@ -38,7 +39,8 @@ import {
   getDocs,
   updateDoc,
   deleteDoc,
-  Timestamp
+  Timestamp,
+  limit
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 
@@ -78,6 +80,7 @@ interface Message {
 
 export function Vortex() {
   const [groups, setGroups] = useState<Group[]>([]);
+  const [filteredGroups, setFilteredGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -94,6 +97,7 @@ export function Vortex() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showMembersDialog, setShowMembersDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -139,6 +143,7 @@ export function Vortex() {
           
           if (userGroupIds.length === 0) {
             setGroups([]);
+            setFilteredGroups([]);
             setLoading(false);
             return;
           }
@@ -147,36 +152,50 @@ export function Vortex() {
           
           // Fetch each group's details
           for (const groupId of userGroupIds) {
-            const groupDoc = await getDoc(doc(db, 'groups', groupId));
-            
-            if (groupDoc.exists()) {
-              const groupData = groupDoc.data();
-              const createdAt = groupData.createdAt;
-              const updatedAt = groupData.updatedAt;
+            try {
+              const groupDoc = await getDoc(doc(db, 'groups', groupId));
               
-              groupsData.push({
-                id: groupDoc.id,
-                name: groupData.name,
-                description: groupData.description,
-                avatar: groupData.avatar,
-                isPrivate: groupData.isPrivate,
-                createdBy: groupData.createdBy,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                memberCount: groupData.memberCount || 1,
-                maxMembers: groupData.maxMembers || 100
-              });
+              if (groupDoc.exists()) {
+                const groupData = groupDoc.data();
+                const createdAt = groupData.createdAt;
+                const updatedAt = groupData.updatedAt;
+                
+                groupsData.push({
+                  id: groupDoc.id,
+                  name: groupData.name || 'Unnamed Group',
+                  description: groupData.description || '',
+                  avatar: groupData.avatar || null,
+                  isPrivate: groupData.isPrivate !== undefined ? groupData.isPrivate : true,
+                  createdBy: groupData.createdBy || '',
+                  createdAt: createdAt || new Date(),
+                  updatedAt: updatedAt || new Date(),
+                  memberCount: groupData.memberCount || 1,
+                  maxMembers: groupData.maxMembers || 100
+                });
+              }
+            } catch (err) {
+              console.error(`Error fetching group ${groupId}:`, err);
             }
           }
           
           // Sort groups by last activity (most recent first)
           groupsData.sort((a, b) => {
-            const timeA = a.updatedAt ? a.updatedAt.toMillis() : a.createdAt.toMillis();
-            const timeB = b.updatedAt ? b.updatedAt.toMillis() : b.createdAt.toMillis();
+            const timeA = a.updatedAt ? 
+              (typeof a.updatedAt.toMillis === 'function' ? a.updatedAt.toMillis() : new Date(a.updatedAt).getTime()) : 
+              (typeof a.createdAt.toMillis === 'function' ? a.createdAt.toMillis() : new Date(a.createdAt).getTime());
+            
+            const timeB = b.updatedAt ? 
+              (typeof b.updatedAt.toMillis === 'function' ? b.updatedAt.toMillis() : new Date(b.updatedAt).getTime()) : 
+              (typeof b.createdAt.toMillis === 'function' ? b.createdAt.toMillis() : new Date(b.createdAt).getTime());
+            
             return timeB - timeA;
           });
           
           setGroups(groupsData);
+          setFilteredGroups(groupsData);
+          setLoading(false);
+        }, (error) => {
+          console.error('Error in group members snapshot:', error);
           setLoading(false);
         });
         
@@ -194,6 +213,21 @@ export function Vortex() {
 
     fetchUserGroups();
   }, [currentUser, toast]);
+
+  // Filter groups when search query changes
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredGroups(groups);
+      return;
+    }
+    
+    const filtered = groups.filter(group => 
+      group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      group.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    
+    setFilteredGroups(filtered);
+  }, [searchQuery, groups]);
 
   // Fetch group messages when a group is selected
   useEffect(() => {
@@ -215,38 +249,42 @@ export function Vortex() {
           const messagesData: Message[] = [];
           
           for (const doc of snapshot.docs) {
-            const messageData = doc.data();
-            
-            // Get sender info if not already included
-            let senderName = messageData.senderName;
-            let senderAvatar = messageData.senderAvatar;
-            
-            if (!senderName || !senderAvatar) {
-              try {
-                const { data: senderProfile } = await supabase
-                  .from('profiles')
-                  .select('name, avatar')
-                  .eq('id', messageData.senderId)
-                  .single();
-                
-                if (senderProfile) {
-                  senderName = senderProfile.name;
-                  senderAvatar = senderProfile.avatar;
+            try {
+              const messageData = doc.data();
+              
+              // Get sender info if not already included
+              let senderName = messageData.senderName;
+              let senderAvatar = messageData.senderAvatar;
+              
+              if (!senderName || !senderAvatar) {
+                try {
+                  const { data: senderProfile } = await supabase
+                    .from('profiles')
+                    .select('name, avatar')
+                    .eq('id', messageData.senderId)
+                    .single();
+                  
+                  if (senderProfile) {
+                    senderName = senderProfile.name;
+                    senderAvatar = senderProfile.avatar;
+                  }
+                } catch (error) {
+                  console.error('Error fetching sender profile:', error);
                 }
-              } catch (error) {
-                console.error('Error fetching sender profile:', error);
               }
+              
+              messagesData.push({
+                id: doc.id,
+                content: messageData.content || '',
+                senderId: messageData.senderId || '',
+                senderName: senderName || 'Unknown User',
+                senderAvatar: senderAvatar || null,
+                createdAt: messageData.createdAt || new Date(),
+                groupId: messageData.groupId || ''
+              });
+            } catch (err) {
+              console.error(`Error processing message ${doc.id}:`, err);
             }
-            
-            messagesData.push({
-              id: doc.id,
-              content: messageData.content,
-              senderId: messageData.senderId,
-              senderName: senderName || 'Unknown User',
-              senderAvatar: senderAvatar || null,
-              createdAt: messageData.createdAt,
-              groupId: messageData.groupId
-            });
           }
           
           setMessages(messagesData);
@@ -255,6 +293,8 @@ export function Vortex() {
           setTimeout(() => {
             scrollToBottom();
           }, 100);
+        }, (error) => {
+          console.error('Error in messages snapshot:', error);
         });
         
         return () => unsubscribe();
@@ -298,36 +338,40 @@ export function Vortex() {
           const membersData: Member[] = [];
           
           for (const doc of snapshot.docs) {
-            const memberData = doc.data();
-            
-            // Get member profile info
             try {
-              const { data: memberProfile } = await supabase
-                .from('profiles')
-                .select('name, username, avatar')
-                .eq('id', memberData.userId)
-                .single();
+              const memberData = doc.data();
               
-              membersData.push({
-                id: doc.id,
-                userId: memberData.userId,
-                groupId: memberData.groupId,
-                role: memberData.role,
-                joinedAt: memberData.joinedAt,
-                name: memberProfile?.name || 'Unknown User',
-                username: memberProfile?.username || 'unknown',
-                avatar: memberProfile?.avatar || null
-              });
-            } catch (error) {
-              console.error('Error fetching member profile:', error);
-              
-              membersData.push({
-                id: doc.id,
-                userId: memberData.userId,
-                groupId: memberData.groupId,
-                role: memberData.role,
-                joinedAt: memberData.joinedAt
-              });
+              // Get member profile info
+              try {
+                const { data: memberProfile } = await supabase
+                  .from('profiles')
+                  .select('name, username, avatar')
+                  .eq('id', memberData.userId)
+                  .single();
+                
+                membersData.push({
+                  id: doc.id,
+                  userId: memberData.userId,
+                  groupId: memberData.groupId,
+                  role: memberData.role,
+                  joinedAt: memberData.joinedAt,
+                  name: memberProfile?.name || 'Unknown User',
+                  username: memberProfile?.username || 'unknown',
+                  avatar: memberProfile?.avatar || null
+                });
+              } catch (error) {
+                console.error('Error fetching member profile:', error);
+                
+                membersData.push({
+                  id: doc.id,
+                  userId: memberData.userId,
+                  groupId: memberData.groupId,
+                  role: memberData.role,
+                  joinedAt: memberData.joinedAt
+                });
+              }
+            } catch (err) {
+              console.error(`Error processing member ${doc.id}:`, err);
             }
           }
           
@@ -336,12 +380,17 @@ export function Vortex() {
             if (a.role === 'admin' && b.role !== 'admin') return -1;
             if (a.role !== 'admin' && b.role === 'admin') return 1;
             
-            const timeA = a.joinedAt ? a.joinedAt.toMillis() : 0;
-            const timeB = b.joinedAt ? b.joinedAt.toMillis() : 0;
+            const timeA = a.joinedAt ? 
+              (typeof a.joinedAt.toMillis === 'function' ? a.joinedAt.toMillis() : new Date(a.joinedAt).getTime()) : 0;
+            const timeB = b.joinedAt ? 
+              (typeof b.joinedAt.toMillis === 'function' ? b.joinedAt.toMillis() : new Date(b.joinedAt).getTime()) : 0;
+            
             return timeA - timeB;
           });
           
           setGroupMembers(membersData);
+        }, (error) => {
+          console.error('Error in group members snapshot:', error);
         });
         
         return () => unsubscribe();
@@ -661,6 +710,19 @@ export function Vortex() {
               </Button>
             </div>
 
+            {/* Search Bar */}
+            <div className="p-2 border-b">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search groups..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 h-8 text-xs font-pixelated"
+                />
+              </div>
+            </div>
+
             {/* Groups List */}
             <div className="flex-1 overflow-hidden">
               <ScrollArea className="h-full">
@@ -676,9 +738,9 @@ export function Vortex() {
                       </div>
                     ))}
                   </div>
-                ) : groups.length > 0 ? (
+                ) : filteredGroups.length > 0 ? (
                   <div className="p-2">
-                    {groups.map(group => (
+                    {filteredGroups.map(group => (
                       <div
                         key={group.id}
                         onClick={() => setSelectedGroup(group)}
@@ -704,9 +766,9 @@ export function Vortex() {
                               {group.name}
                             </p>
                             {group.isPrivate ? (
-                              <Lock className="h-3 w-3 text-muted-foreground" />
+                              <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                             ) : (
-                              <Globe className="h-3 w-3 text-muted-foreground" />
+                              <Globe className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                             )}
                           </div>
                           <p className="text-xs truncate text-muted-foreground font-pixelated">
@@ -719,7 +781,9 @@ export function Vortex() {
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                     <Users className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground mb-4 font-pixelated text-sm">No groups yet</p>
+                    <p className="text-muted-foreground mb-4 font-pixelated text-sm">
+                      {searchQuery ? 'No matching groups found' : 'No groups yet'}
+                    </p>
                     <Button 
                       onClick={() => setShowCreateGroup(true)}
                       variant="outline" 
@@ -766,8 +830,13 @@ export function Vortex() {
                       onChange={(e) => setNewGroupIsPrivate(e.target.checked)}
                       className="rounded border-gray-300"
                     />
-                    <label htmlFor="isPrivate" className="text-sm font-pixelated">
+                    <label htmlFor="isPrivate" className="text-sm font-pixelated flex items-center gap-1">
                       Private Group
+                      {newGroupIsPrivate ? (
+                        <Lock className="h-3 w-3 text-muted-foreground" />
+                      ) : (
+                        <Globe className="h-3 w-3 text-muted-foreground" />
+                      )}
                     </label>
                   </div>
                   <div className="flex justify-end space-x-2 pt-4">
@@ -892,7 +961,7 @@ export function Vortex() {
                                 className={`flex gap-2 ${message.senderId === currentUser?.id ? 'justify-end' : 'justify-start'}`}
                               >
                                 {message.senderId !== currentUser?.id && (
-                                  <Avatar className="h-8 w-8 mt-1">
+                                  <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
                                     {message.senderAvatar ? (
                                       <AvatarImage src={message.senderAvatar} />
                                     ) : (
