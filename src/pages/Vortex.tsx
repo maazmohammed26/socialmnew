@@ -18,9 +18,9 @@ import {
   X, 
   Info,
   MessageSquare,
-  Zap
+  Zap,
+  ArrowLeft
 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -40,25 +40,45 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { supabase } from '@/integrations/supabase/client';
+import { 
+  collection, 
+  addDoc, 
+  getDocs, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot,
+  doc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  getDoc,
+  setDoc,
+  arrayUnion,
+  arrayRemove,
+  Timestamp
+} from 'firebase/firestore';
+import { db } from '@/config/firebase';
 
 interface Group {
   id: string;
   name: string;
   description: string;
   avatar: string | null;
-  is_private: boolean;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  member_count: number;
-  max_members: number;
+  isPrivate: boolean;
+  createdBy: string;
+  createdAt: any;
+  updatedAt: any;
+  memberCount: number;
+  maxMembers: number;
 }
 
 interface GroupMember {
   id: string;
-  user_id: string;
+  userId: string;
   role: 'admin' | 'member';
-  joined_at: string;
+  joinedAt: any;
   name: string;
   username: string;
   avatar: string | null;
@@ -66,21 +86,21 @@ interface GroupMember {
 
 interface GroupMessage {
   id: string;
-  sender_id: string;
+  senderId: string;
   content: string;
-  message_type: string;
-  created_at: string;
-  sender_name: string;
-  sender_username: string;
-  sender_avatar: string | null;
+  messageType: string;
+  createdAt: any;
+  senderName: string;
+  senderUsername: string;
+  senderAvatar: string | null;
 }
 
 interface JoinRequest {
   id: string;
-  user_id: string;
+  userId: string;
   status: string;
   message: string | null;
-  created_at: string;
+  createdAt: any;
   name: string;
   username: string;
   avatar: string | null;
@@ -106,7 +126,7 @@ export function Vortex() {
     name: '',
     description: '',
     avatar: '',
-    is_private: true
+    isPrivate: true
   });
   const [groupSuggestions, setGroupSuggestions] = useState<any[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<any>(null);
@@ -114,9 +134,18 @@ export function Vortex() {
   const [processingAction, setProcessingAction] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const [unsubscribeMessages, setUnsubscribeMessages] = useState<any>(null);
+  const [unsubscribeMembers, setUnsubscribeMembers] = useState<any>(null);
+  const [unsubscribeRequests, setUnsubscribeRequests] = useState<any>(null);
 
   useEffect(() => {
     fetchCurrentUser();
+    return () => {
+      // Clean up subscriptions
+      if (unsubscribeMessages) unsubscribeMessages();
+      if (unsubscribeMembers) unsubscribeMembers();
+      if (unsubscribeRequests) unsubscribeRequests();
+    };
   }, []);
 
   useEffect(() => {
@@ -131,85 +160,14 @@ export function Vortex() {
       fetchGroupMembers();
       fetchGroupMessages();
       fetchJoinRequests();
-      
-      // Set up real-time subscription for messages
-      const messagesChannel = supabase
-        .channel(`group-messages-${selectedGroup.id}`)
-        .on('postgres_changes', 
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'group_messages',
-            filter: `group_id=eq.${selectedGroup.id}`
-          }, 
-          async (payload) => {
-            console.log('New group message:', payload);
-            
-            // Fetch the sender's profile information
-            const { data: senderProfile } = await supabase
-              .from('profiles')
-              .select('name, username, avatar')
-              .eq('id', payload.new.sender_id)
-              .single();
-            
-            if (senderProfile) {
-              const newMessage: GroupMessage = {
-                ...payload.new,
-                sender_name: senderProfile.name,
-                sender_username: senderProfile.username,
-                sender_avatar: senderProfile.avatar
-              };
-              
-              // Add the new message to state
-              setGroupMessages(prev => [...prev, newMessage]);
-              
-              // Scroll to bottom
-              setTimeout(() => {
-                scrollToBottom();
-              }, 100);
-            }
-          }
-        )
-        .subscribe();
-      
-      // Set up real-time subscription for members
-      const membersChannel = supabase
-        .channel(`group-members-${selectedGroup.id}`)
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'group_members',
-            filter: `group_id=eq.${selectedGroup.id}`
-          }, 
-          () => {
-            fetchGroupMembers();
-          }
-        )
-        .subscribe();
-      
-      // Set up real-time subscription for join requests
-      const requestsChannel = supabase
-        .channel(`group-requests-${selectedGroup.id}`)
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'group_join_requests',
-            filter: `group_id=eq.${selectedGroup.id}`
-          }, 
-          () => {
-            fetchJoinRequests();
-          }
-        )
-        .subscribe();
-      
-      return () => {
-        supabase.removeChannel(messagesChannel);
-        supabase.removeChannel(membersChannel);
-        supabase.removeChannel(requestsChannel);
-      };
     }
+    
+    return () => {
+      // Clean up subscriptions when group changes
+      if (unsubscribeMessages) unsubscribeMessages();
+      if (unsubscribeMembers) unsubscribeMembers();
+      if (unsubscribeRequests) unsubscribeRequests();
+    };
   }, [selectedGroup]);
 
   useEffect(() => {
@@ -237,40 +195,52 @@ export function Vortex() {
     try {
       setLoading(true);
       
-      // Get groups where user is a member
-      const { data: memberGroups, error: memberError } = await supabase
-        .from('group_members')
-        .select(`
-          group_id,
-          groups:group_id (
-            id,
-            name,
-            description,
-            avatar,
-            is_private,
-            created_by,
-            created_at,
-            updated_at,
-            member_count,
-            max_members
-          )
-        `)
-        .eq('user_id', currentUser.id);
+      // Get groups where user is a member from Firebase
+      const groupsRef = collection(db, 'groupMembers');
+      const q = query(groupsRef, where('userId', '==', currentUser.id));
+      const querySnapshot = await getDocs(q);
       
-      if (memberError) throw memberError;
+      const memberGroupIds = querySnapshot.docs.map(doc => doc.data().groupId);
       
-      const formattedGroups = memberGroups.map(item => item.groups);
+      if (memberGroupIds.length === 0) {
+        setGroups([]);
+        setLoading(false);
+        return;
+      }
       
-      // Sort groups by updated_at (most recent first)
-      formattedGroups.sort((a, b) => 
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      );
+      const groupsData: Group[] = [];
       
-      setGroups(formattedGroups);
+      for (const groupId of memberGroupIds) {
+        const groupDoc = await getDoc(doc(db, 'groups', groupId));
+        if (groupDoc.exists()) {
+          const groupData = groupDoc.data();
+          groupsData.push({
+            id: groupDoc.id,
+            name: groupData.name,
+            description: groupData.description,
+            avatar: groupData.avatar,
+            isPrivate: groupData.isPrivate,
+            createdBy: groupData.createdBy,
+            createdAt: groupData.createdAt,
+            updatedAt: groupData.updatedAt,
+            memberCount: groupData.memberCount,
+            maxMembers: groupData.maxMembers
+          });
+        }
+      }
+      
+      // Sort groups by updatedAt (most recent first)
+      groupsData.sort((a, b) => {
+        const timeA = a.updatedAt?.toDate?.() || new Date(0);
+        const timeB = b.updatedAt?.toDate?.() || new Date(0);
+        return timeB.getTime() - timeA.getTime();
+      });
+      
+      setGroups(groupsData);
       
       // If there are groups, select the first one
-      if (formattedGroups.length > 0 && !selectedGroup) {
-        setSelectedGroup(formattedGroups[0]);
+      if (groupsData.length > 0 && !selectedGroup) {
+        setSelectedGroup(groupsData[0]);
       }
     } catch (error) {
       console.error('Error fetching user groups:', error);
@@ -286,14 +256,45 @@ export function Vortex() {
 
   const fetchGroupSuggestions = async () => {
     try {
-      const { data, error } = await supabase.rpc('get_group_suggestions', {
-        user_uuid: currentUser.id,
-        limit_count: 5
-      });
+      // Get all groups
+      const groupsRef = collection(db, 'groups');
+      const groupsSnapshot = await getDocs(groupsRef);
       
-      if (error) throw error;
+      // Get user's groups
+      const userGroupsRef = collection(db, 'groupMembers');
+      const q = query(userGroupsRef, where('userId', '==', currentUser.id));
+      const userGroupsSnapshot = await getDocs(q);
       
-      setGroupSuggestions(data || []);
+      const userGroupIds = new Set(userGroupsSnapshot.docs.map(doc => doc.data().groupId));
+      
+      // Get user's join requests
+      const requestsRef = collection(db, 'groupJoinRequests');
+      const requestsQuery = query(requestsRef, where('userId', '==', currentUser.id));
+      const requestsSnapshot = await getDocs(requestsQuery);
+      
+      const requestedGroupIds = new Set(requestsSnapshot.docs.map(doc => doc.data().groupId));
+      
+      // Filter groups that user is not a member of and hasn't requested to join
+      const suggestedGroups = groupsSnapshot.docs
+        .filter(doc => !userGroupIds.has(doc.id) && !requestedGroupIds.has(doc.id))
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            name: data.name,
+            description: data.description,
+            avatar: data.avatar,
+            memberCount: data.memberCount,
+            createdBy: data.createdBy,
+            createdAt: data.createdAt,
+            mutualMembers: 0 // We'll calculate this later
+          };
+        });
+      
+      // Sort by member count for now (could implement mutual friends later)
+      suggestedGroups.sort((a, b) => b.memberCount - a.memberCount);
+      
+      setGroupSuggestions(suggestedGroups.slice(0, 5));
     } catch (error) {
       console.error('Error fetching group suggestions:', error);
     }
@@ -303,13 +304,47 @@ export function Vortex() {
     if (!selectedGroup) return;
     
     try {
-      const { data, error } = await supabase.rpc('get_group_members_with_profiles', {
-        group_uuid: selectedGroup.id
+      // Set up real-time listener for group members
+      const membersRef = collection(db, 'groupMembers');
+      const q = query(membersRef, where('groupId', '==', selectedGroup.id));
+      
+      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        const membersData: GroupMember[] = [];
+        
+        for (const memberDoc of querySnapshot.docs) {
+          const memberData = memberDoc.data();
+          
+          // Get user profile
+          const userDoc = await getDoc(doc(db, 'profiles', memberData.userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            
+            membersData.push({
+              id: memberDoc.id,
+              userId: memberData.userId,
+              role: memberData.role,
+              joinedAt: memberData.joinedAt,
+              name: userData.name || 'Unknown User',
+              username: userData.username || 'unknown',
+              avatar: userData.avatar
+            });
+          }
+        }
+        
+        // Sort members: admins first, then by join date
+        membersData.sort((a, b) => {
+          if (a.role === 'admin' && b.role !== 'admin') return -1;
+          if (a.role !== 'admin' && b.role === 'admin') return 1;
+          
+          const timeA = a.joinedAt?.toDate?.() || new Date(0);
+          const timeB = b.joinedAt?.toDate?.() || new Date(0);
+          return timeA.getTime() - timeB.getTime();
+        });
+        
+        setGroupMembers(membersData);
       });
       
-      if (error) throw error;
-      
-      setGroupMembers(data || []);
+      setUnsubscribeMembers(() => unsubscribe);
     } catch (error) {
       console.error('Error fetching group members:', error);
     }
@@ -319,20 +354,47 @@ export function Vortex() {
     if (!selectedGroup) return;
     
     try {
-      const { data, error } = await supabase.rpc('get_group_messages_with_profiles', {
-        group_uuid: selectedGroup.id,
-        limit_count: 100,
-        offset_count: 0
+      // Set up real-time listener for messages
+      const messagesRef = collection(db, 'groupMessages');
+      const q = query(
+        messagesRef, 
+        where('groupId', '==', selectedGroup.id),
+        orderBy('createdAt', 'asc')
+      );
+      
+      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        const messagesData: GroupMessage[] = [];
+        
+        for (const messageDoc of querySnapshot.docs) {
+          const messageData = messageDoc.data();
+          
+          // Get sender profile
+          const userDoc = await getDoc(doc(db, 'profiles', messageData.senderId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            
+            messagesData.push({
+              id: messageDoc.id,
+              senderId: messageData.senderId,
+              content: messageData.content,
+              messageType: messageData.messageType,
+              createdAt: messageData.createdAt,
+              senderName: userData.name || 'Unknown User',
+              senderUsername: userData.username || 'unknown',
+              senderAvatar: userData.avatar
+            });
+          }
+        }
+        
+        setGroupMessages(messagesData);
+        
+        // Scroll to bottom after messages load
+        setTimeout(() => {
+          scrollToBottom();
+        }, 100);
       });
       
-      if (error) throw error;
-      
-      setGroupMessages(data || []);
-      
-      // Scroll to bottom after messages load
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
+      setUnsubscribeMessages(() => unsubscribe);
     } catch (error) {
       console.error('Error fetching group messages:', error);
     }
@@ -343,19 +405,55 @@ export function Vortex() {
     
     // Check if user is an admin
     const isAdmin = groupMembers.some(
-      member => member.user_id === currentUser.id && member.role === 'admin'
+      member => member.userId === currentUser.id && member.role === 'admin'
     );
     
     if (!isAdmin) return;
     
     try {
-      const { data, error } = await supabase.rpc('get_group_join_requests_with_profiles', {
-        group_uuid: selectedGroup.id
+      // Set up real-time listener for join requests
+      const requestsRef = collection(db, 'groupJoinRequests');
+      const q = query(
+        requestsRef, 
+        where('groupId', '==', selectedGroup.id),
+        where('status', '==', 'pending')
+      );
+      
+      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        const requestsData: JoinRequest[] = [];
+        
+        for (const requestDoc of querySnapshot.docs) {
+          const requestData = requestDoc.data();
+          
+          // Get user profile
+          const userDoc = await getDoc(doc(db, 'profiles', requestData.userId));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            
+            requestsData.push({
+              id: requestDoc.id,
+              userId: requestData.userId,
+              status: requestData.status,
+              message: requestData.message,
+              createdAt: requestData.createdAt,
+              name: userData.name || 'Unknown User',
+              username: userData.username || 'unknown',
+              avatar: userData.avatar
+            });
+          }
+        }
+        
+        // Sort by creation date (newest first)
+        requestsData.sort((a, b) => {
+          const timeA = a.createdAt?.toDate?.() || new Date(0);
+          const timeB = b.createdAt?.toDate?.() || new Date(0);
+          return timeB.getTime() - timeA.getTime();
+        });
+        
+        setJoinRequests(requestsData);
       });
       
-      if (error) throw error;
-      
-      setJoinRequests(data || []);
+      setUnsubscribeRequests(() => unsubscribe);
     } catch (error) {
       console.error('Error fetching join requests:', error);
     }
@@ -367,17 +465,19 @@ export function Vortex() {
     try {
       setSendingMessage(true);
       
-      const { data, error } = await supabase
-        .from('group_messages')
-        .insert({
-          group_id: selectedGroup.id,
-          sender_id: currentUser.id,
-          content: newMessage.trim(),
-          message_type: 'text'
-        })
-        .select();
+      // Add message to Firebase
+      await addDoc(collection(db, 'groupMessages'), {
+        groupId: selectedGroup.id,
+        senderId: currentUser.id,
+        content: newMessage.trim(),
+        messageType: 'text',
+        createdAt: serverTimestamp()
+      });
       
-      if (error) throw error;
+      // Update group's updatedAt timestamp
+      await updateDoc(doc(db, 'groups', selectedGroup.id), {
+        updatedAt: serverTimestamp()
+      });
       
       setNewMessage('');
       
@@ -400,15 +500,26 @@ export function Vortex() {
     try {
       setProcessingAction(true);
       
-      const { data, error } = await supabase.rpc('create_group_with_admin', {
-        p_name: newGroup.name.trim(),
-        p_description: newGroup.description.trim(),
-        p_avatar: newGroup.avatar.trim() || null,
-        p_is_private: newGroup.is_private,
-        p_creator_id: currentUser.id
+      // Create group in Firebase
+      const groupRef = await addDoc(collection(db, 'groups'), {
+        name: newGroup.name.trim(),
+        description: newGroup.description.trim(),
+        avatar: newGroup.avatar.trim() || null,
+        isPrivate: newGroup.isPrivate,
+        createdBy: currentUser.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        memberCount: 1,
+        maxMembers: 100
       });
       
-      if (error) throw error;
+      // Add creator as admin
+      await addDoc(collection(db, 'groupMembers'), {
+        groupId: groupRef.id,
+        userId: currentUser.id,
+        role: 'admin',
+        joinedAt: serverTimestamp()
+      });
       
       toast({
         title: 'Group created!',
@@ -420,7 +531,7 @@ export function Vortex() {
         name: '',
         description: '',
         avatar: '',
-        is_private: true
+        isPrivate: true
       });
       
       setShowCreateGroupDialog(false);
@@ -429,16 +540,21 @@ export function Vortex() {
       await fetchUserGroups();
       
       // Select the newly created group
-      if (data) {
-        const { data: newGroupData, error: groupError } = await supabase
-          .from('groups')
-          .select('*')
-          .eq('id', data)
-          .single();
-        
-        if (!groupError && newGroupData) {
-          setSelectedGroup(newGroupData);
-        }
+      const groupDoc = await getDoc(groupRef);
+      if (groupDoc.exists()) {
+        const groupData = groupDoc.data();
+        setSelectedGroup({
+          id: groupDoc.id,
+          name: groupData.name,
+          description: groupData.description,
+          avatar: groupData.avatar,
+          isPrivate: groupData.isPrivate,
+          createdBy: groupData.createdBy,
+          createdAt: groupData.createdAt,
+          updatedAt: groupData.updatedAt,
+          memberCount: groupData.memberCount,
+          maxMembers: groupData.maxMembers
+        });
       }
     } catch (error) {
       console.error('Error creating group:', error);
@@ -458,16 +574,14 @@ export function Vortex() {
     try {
       setProcessingAction(true);
       
-      const { error } = await supabase
-        .from('group_join_requests')
-        .insert({
-          group_id: selectedSuggestion.id,
-          user_id: currentUser.id,
-          message: joinMessage.trim() || null,
-          status: 'pending'
-        });
-      
-      if (error) throw error;
+      // Add join request to Firebase
+      await addDoc(collection(db, 'groupJoinRequests'), {
+        groupId: selectedSuggestion.id,
+        userId: currentUser.id,
+        message: joinMessage.trim() || null,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
       
       toast({
         title: 'Request sent!',
@@ -492,35 +606,59 @@ export function Vortex() {
     }
   };
 
-  const approveJoinRequest = async (requestId: string) => {
+  const approveJoinRequest = async (requestId: string, userId: string) => {
     if (processingAction) return;
     
     try {
       setProcessingAction(true);
       
-      const { data, error } = await supabase.rpc('approve_group_join_request', {
-        request_uuid: requestId,
-        admin_uuid: currentUser.id
+      // Get the request document
+      const requestDoc = await getDoc(doc(db, 'groupJoinRequests', requestId));
+      if (!requestDoc.exists()) {
+        throw new Error('Request not found');
+      }
+      
+      const requestData = requestDoc.data();
+      const groupId = requestData.groupId;
+      
+      // Update request status
+      await updateDoc(doc(db, 'groupJoinRequests', requestId), {
+        status: 'approved'
       });
       
-      if (error) throw error;
+      // Add user to group members
+      await addDoc(collection(db, 'groupMembers'), {
+        groupId: groupId,
+        userId: userId,
+        role: 'member',
+        joinedAt: serverTimestamp()
+      });
       
-      if (data) {
-        toast({
-          title: 'Request approved',
-          description: 'The user has been added to the group'
-        });
-        
-        // Refresh join requests and members
-        fetchJoinRequests();
-        fetchGroupMembers();
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to approve request'
+      // Update group member count
+      const groupDoc = await getDoc(doc(db, 'groups', groupId));
+      if (groupDoc.exists()) {
+        const groupData = groupDoc.data();
+        await updateDoc(doc(db, 'groups', groupId), {
+          memberCount: (groupData.memberCount || 0) + 1
         });
       }
+      
+      // Create notification for the user
+      await addDoc(collection(db, 'notifications'), {
+        userId: userId,
+        type: 'group_join_approved',
+        content: `Your request to join ${selectedGroup?.name} has been approved`,
+        referenceId: groupId,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+      
+      toast({
+        title: 'Request approved',
+        description: 'The user has been added to the group'
+      });
+      
+      // Refresh join requests and members will happen automatically via listeners
     } catch (error) {
       console.error('Error approving join request:', error);
       toast({
@@ -533,34 +671,42 @@ export function Vortex() {
     }
   };
 
-  const rejectJoinRequest = async (requestId: string) => {
+  const rejectJoinRequest = async (requestId: string, userId: string) => {
     if (processingAction) return;
     
     try {
       setProcessingAction(true);
       
-      const { data, error } = await supabase.rpc('reject_group_join_request', {
-        request_uuid: requestId,
-        admin_uuid: currentUser.id
+      // Get the request document
+      const requestDoc = await getDoc(doc(db, 'groupJoinRequests', requestId));
+      if (!requestDoc.exists()) {
+        throw new Error('Request not found');
+      }
+      
+      const requestData = requestDoc.data();
+      const groupId = requestData.groupId;
+      
+      // Update request status
+      await updateDoc(doc(db, 'groupJoinRequests', requestId), {
+        status: 'rejected'
       });
       
-      if (error) throw error;
+      // Create notification for the user
+      await addDoc(collection(db, 'notifications'), {
+        userId: userId,
+        type: 'group_join_rejected',
+        content: `Your request to join ${selectedGroup?.name} has been rejected`,
+        referenceId: groupId,
+        read: false,
+        createdAt: serverTimestamp()
+      });
       
-      if (data) {
-        toast({
-          title: 'Request rejected',
-          description: 'The join request has been rejected'
-        });
-        
-        // Refresh join requests
-        fetchJoinRequests();
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to reject request'
-        });
-      }
+      toast({
+        title: 'Request rejected',
+        description: 'The join request has been rejected'
+      });
+      
+      // Refresh join requests will happen automatically via listener
     } catch (error) {
       console.error('Error rejecting join request:', error);
       toast({
@@ -579,9 +725,22 @@ export function Vortex() {
     try {
       setProcessingAction(true);
       
+      // Find the member document for this user
+      const membersRef = collection(db, 'groupMembers');
+      const q = query(
+        membersRef, 
+        where('groupId', '==', selectedGroup.id),
+        where('userId', '==', currentUser.id)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        throw new Error('Member record not found');
+      }
+      
       // Check if user is the only admin
       const isAdmin = groupMembers.some(
-        member => member.user_id === currentUser.id && member.role === 'admin'
+        member => member.userId === currentUser.id && member.role === 'admin'
       );
       
       const adminCount = groupMembers.filter(member => member.role === 'admin').length;
@@ -597,19 +756,12 @@ export function Vortex() {
       }
       
       // Delete the member record
-      const { error } = await supabase
-        .from('group_members')
-        .delete()
-        .eq('group_id', selectedGroup.id)
-        .eq('user_id', currentUser.id);
-      
-      if (error) throw error;
+      await deleteDoc(doc(db, 'groupMembers', querySnapshot.docs[0].id));
       
       // Update group member count
-      await supabase
-        .from('groups')
-        .update({ member_count: selectedGroup.member_count - 1 })
-        .eq('id', selectedGroup.id);
+      await updateDoc(doc(db, 'groups', selectedGroup.id), {
+        memberCount: Math.max(0, selectedGroup.memberCount - 1)
+      });
       
       toast({
         title: 'Left group',
@@ -642,14 +794,16 @@ export function Vortex() {
     }
   };
 
-  const formatMessageTime = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatMessageTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const isUserAdmin = () => {
     return groupMembers.some(
-      member => member.user_id === currentUser?.id && member.role === 'admin'
+      member => member.userId === currentUser?.id && member.role === 'admin'
     );
   };
 
@@ -725,7 +879,7 @@ export function Vortex() {
                             {group.name}
                           </p>
                           <p className="text-xs text-muted-foreground truncate font-pixelated">
-                            {group.member_count} {group.member_count === 1 ? 'member' : 'members'}
+                            {group.memberCount} {group.memberCount === 1 ? 'member' : 'members'}
                           </p>
                         </div>
                       </div>
@@ -761,7 +915,7 @@ export function Vortex() {
                     onClick={() => setSelectedGroup(null)}
                     className="md:hidden flex-shrink-0 h-8 w-8"
                   >
-                    <X className="h-4 w-4" />
+                    <ArrowLeft className="h-4 w-4" />
                   </Button>
                   <Avatar className="h-8 w-8 flex-shrink-0">
                     {selectedGroup.avatar ? (
@@ -775,7 +929,7 @@ export function Vortex() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate text-sm font-pixelated">{selectedGroup.name}</p>
                     <p className="text-xs text-muted-foreground truncate font-pixelated">
-                      {selectedGroup.member_count} {selectedGroup.member_count === 1 ? 'member' : 'members'}
+                      {selectedGroup.memberCount} {selectedGroup.memberCount === 1 ? 'member' : 'members'}
                     </p>
                   </div>
                   <DropdownMenu>
@@ -797,7 +951,7 @@ export function Vortex() {
                         className="font-pixelated text-xs"
                       >
                         <Users className="h-3 w-3 mr-2" />
-                        Members ({selectedGroup.member_count})
+                        Members ({selectedGroup.memberCount})
                       </DropdownMenuItem>
                       {isUserAdmin() && (
                         <DropdownMenuItem 
@@ -841,7 +995,7 @@ export function Vortex() {
                         </div>
                       ) : (
                         groupMessages.map((message) => {
-                          const isCurrentUser = message.sender_id === currentUser?.id;
+                          const isCurrentUser = message.senderId === currentUser?.id;
                           
                           return (
                             <div 
@@ -850,11 +1004,11 @@ export function Vortex() {
                             >
                               <div className={`flex gap-2 max-w-[75%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
                                 <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
-                                  {message.sender_avatar ? (
-                                    <AvatarImage src={message.sender_avatar} />
+                                  {message.senderAvatar ? (
+                                    <AvatarImage src={message.senderAvatar} />
                                   ) : (
                                     <AvatarFallback className="bg-social-green text-white font-pixelated text-xs">
-                                      {message.sender_name.substring(0, 2).toUpperCase()}
+                                      {message.senderName.substring(0, 2).toUpperCase()}
                                     </AvatarFallback>
                                   )}
                                 </Avatar>
@@ -867,14 +1021,14 @@ export function Vortex() {
                                 >
                                   {!isCurrentUser && (
                                     <p className="text-xs font-medium mb-1 font-pixelated">
-                                      {message.sender_name}
+                                      {message.senderName}
                                     </p>
                                   )}
                                   <p className="text-xs whitespace-pre-wrap break-words font-pixelated">
                                     {message.content}
                                   </p>
                                   <p className="text-xs opacity-70 mt-1 text-right font-pixelated">
-                                    {formatMessageTime(message.created_at)}
+                                    {formatMessageTime(message.createdAt)}
                                   </p>
                                 </div>
                               </div>
@@ -981,8 +1135,8 @@ export function Vortex() {
               <input
                 type="checkbox"
                 id="is_private"
-                checked={newGroup.is_private}
-                onChange={(e) => setNewGroup({ ...newGroup, is_private: e.target.checked })}
+                checked={newGroup.isPrivate}
+                onChange={(e) => setNewGroup({ ...newGroup, isPrivate: e.target.checked })}
                 className="rounded border-gray-300"
               />
               <label htmlFor="is_private" className="text-sm font-pixelated">
@@ -1044,7 +1198,7 @@ export function Vortex() {
                         <div className="flex-1">
                           <h4 className="font-pixelated text-sm font-medium">{group.name}</h4>
                           <p className="font-pixelated text-xs text-muted-foreground">
-                            {group.member_count} members • {group.mutual_members} mutual friends
+                            {group.memberCount} members
                           </p>
                           {group.description && (
                             <p className="font-pixelated text-xs mt-1 line-clamp-1">
@@ -1123,7 +1277,7 @@ export function Vortex() {
                 <div>
                   <h3 className="font-pixelated text-lg font-medium">{selectedGroup.name}</h3>
                   <p className="font-pixelated text-xs text-muted-foreground">
-                    Created {formatDistanceToNow(new Date(selectedGroup.created_at), { addSuffix: true })}
+                    Created {formatDistanceToNow(selectedGroup.createdAt?.toDate?.() || new Date(selectedGroup.createdAt), { addSuffix: true })}
                   </p>
                 </div>
               </div>
@@ -1137,12 +1291,12 @@ export function Vortex() {
               
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-muted p-3 rounded-md text-center">
-                  <p className="font-pixelated text-sm font-medium">{selectedGroup.member_count}</p>
+                  <p className="font-pixelated text-sm font-medium">{selectedGroup.memberCount}</p>
                   <p className="font-pixelated text-xs text-muted-foreground">Members</p>
                 </div>
                 <div className="bg-muted p-3 rounded-md text-center">
                   <p className="font-pixelated text-sm font-medium">
-                    {selectedGroup.is_private ? 'Private' : 'Public'}
+                    {selectedGroup.isPrivate ? 'Private' : 'Public'}
                   </p>
                   <p className="font-pixelated text-xs text-muted-foreground">Group Type</p>
                 </div>
@@ -1209,7 +1363,7 @@ export function Vortex() {
                       <div className="flex-1">
                         <p className="font-pixelated text-sm font-medium">{request.name}</p>
                         <p className="font-pixelated text-xs text-muted-foreground">
-                          Requested {formatDistanceToNow(new Date(request.created_at), { addSuffix: true })}
+                          Requested {formatDistanceToNow(request.createdAt?.toDate?.() || new Date(request.createdAt), { addSuffix: true })}
                         </p>
                       </div>
                     </div>
@@ -1222,7 +1376,7 @@ export function Vortex() {
                     
                     <div className="flex gap-2 justify-end">
                       <Button
-                        onClick={() => rejectJoinRequest(request.id)}
+                        onClick={() => rejectJoinRequest(request.id, request.userId)}
                         variant="outline"
                         size="sm"
                         className="font-pixelated text-xs"
@@ -1232,7 +1386,7 @@ export function Vortex() {
                         Reject
                       </Button>
                       <Button
-                        onClick={() => approveJoinRequest(request.id)}
+                        onClick={() => approveJoinRequest(request.id, request.userId)}
                         size="sm"
                         className="font-pixelated text-xs bg-social-green hover:bg-social-light-green text-white"
                         disabled={processingAction}
