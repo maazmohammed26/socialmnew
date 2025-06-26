@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Users, UserPlus, UserCheck, MessageCircle, UserMinus, Clock, X, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -533,27 +532,17 @@ export function Friends() {
           <TabsList className="grid w-full grid-cols-3 mx-3 mt-3">
             <TabsTrigger value="friends" className="font-pixelated text-xs relative">
               Friends
-              {friends.length > 0 && (
-                <Badge variant="secondary" className="ml-2 h-4 w-4 p-0 text-xs">
-                  {friends.length}
-                </Badge>
-              )}
             </TabsTrigger>
             <TabsTrigger value="requests" className="font-pixelated text-xs relative">
               Requests
               {requests.length > 0 && (
-                <Badge variant="destructive" className="ml-2 h-4 w-4 p-0 text-xs animate-pulse">
+                <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] text-white">
                   {requests.length}
-                </Badge>
+                </span>
               )}
             </TabsTrigger>
             <TabsTrigger value="suggested" className="font-pixelated text-xs relative">
               Suggested
-              {suggested.length > 0 && (
-                <Badge variant="outline" className="ml-2 h-4 w-4 p-0 text-xs">
-                  {suggested.length}
-                </Badge>
-              )}
             </TabsTrigger>
           </TabsList>
 
