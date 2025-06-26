@@ -312,23 +312,6 @@ export function MobileHeader() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        
-        {/* Bottom Navigation - Icons Only */}
-        <nav className="fixed bottom-0 left-0 right-0 grid grid-cols-5 border-t bg-background">
-          {tabs.map((tab) => (
-            <div
-              key={tab.path} 
-              onClick={() => handleTabClick(tab.path)}
-              className={`flex flex-col items-center justify-center py-2 font-pixelated transition-all duration-200 hover-scale relative cursor-pointer ${
-                isActive(tab.path) 
-                  ? 'text-white bg-social-dark-green shadow-md' 
-                  : 'text-muted-foreground hover:bg-muted/50'
-              }`}
-            >
-              {tab.icon}
-            </div>
-          ))}
-        </nav>
       </header>
 
       {/* Logout Confirmation Dialog */}
