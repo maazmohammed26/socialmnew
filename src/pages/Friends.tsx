@@ -228,8 +228,8 @@ export function Friends() {
       const { error } = await supabase
         .from('friends')
         .insert({
-          requester_id: currentUser.id,
-          requested_id: userId,
+          sender_id: currentUser.id,
+          receiver_id: userId,
           status: 'pending'
         });
 
@@ -244,6 +244,9 @@ export function Friends() {
           throw error;
         }
       } else {
+        // Remove from suggested list
+        setSuggested(prev => prev.filter(user => user.id !== userId));
+
         toast({
           title: 'Friend request sent!',
           description: 'Your friend request has been sent successfully',
