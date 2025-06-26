@@ -1,589 +1,544 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { formatDistanceToNow } from 'date-fns';
 import { 
   Zap, 
-  Users, 
+  Search, 
   Plus, 
-  MessageSquare, 
-  Settings, 
-  UserPlus, 
-  Clock, 
-  Info, 
+  Users, 
   Send, 
-  X,
+  Info, 
+  Settings, 
+  Trash2, 
+  LogOut, 
+  UserPlus, 
+  Check, 
+  X, 
+  MessageSquare,
   Lock,
   Globe,
-  ChevronRight,
-  User,
-  Loader2,
-  AlertTriangle,
-  Check,
-  Trash2
+  ChevronRight
 } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { db, auth } from '@/config/firebase';
 import { 
   collection, 
   addDoc, 
   query, 
   where, 
-  getDocs, 
-  doc, 
-  updateDoc, 
-  serverTimestamp, 
   orderBy, 
-  onSnapshot,
-  getDoc,
-  setDoc,
-  arrayUnion,
-  arrayRemove,
-  deleteDoc
+  onSnapshot, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  updateDoc, 
+  deleteDoc, 
+  serverTimestamp, 
+  setDoc 
 } from 'firebase/firestore';
-import { db } from '@/config/firebase';
 
 interface Group {
   id: string;
   name: string;
   description: string;
-  avatar: string | null;
+  avatar?: string;
   isPrivate: boolean;
   createdBy: string;
   createdAt: any;
-  updatedAt: any;
   memberCount: number;
-  maxMembers: number;
-  lastMessage?: string;
-  lastMessageTime?: any;
 }
 
 interface GroupMember {
   id: string;
+  groupId: string;
   userId: string;
   role: 'admin' | 'member';
   joinedAt: any;
-  name: string;
-  username: string;
-  avatar: string | null;
+  profile?: {
+    name: string;
+    username: string;
+    avatar: string | null;
+  };
 }
 
-interface Message {
+interface GroupMessage {
   id: string;
+  groupId: string;
   senderId: string;
   content: string;
-  messageType: string;
+  messageType: 'text' | 'image' | 'file';
   createdAt: any;
-  senderName: string;
-  senderUsername: string;
-  senderAvatar: string | null;
+  senderName?: string;
+  senderAvatar?: string;
+}
+
+interface JoinRequest {
+  id: string;
+  groupId: string;
+  userId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  message?: string;
+  createdAt: any;
+  profile?: {
+    name: string;
+    username: string;
+    avatar: string | null;
+  };
 }
 
 export function Vortex() {
   const [groups, setGroups] = useState<Group[]>([]);
+  const [myGroups, setMyGroups] = useState<Group[]>([]);
+  const [suggestedGroups, setSuggestedGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<GroupMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDescription, setNewGroupDescription] = useState('');
+  const [isPrivate, setIsPrivate] = useState(true);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [showJoinRequestDialog, setShowJoinRequestDialog] = useState(false);
+  const [joinRequestMessage, setJoinRequestMessage] = useState('');
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [newGroupData, setNewGroupData] = useState({
-    name: '',
-    description: '',
-    avatar: ''
-  });
-  const [searchQuery, setSearchQuery] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [nameError, setNameError] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [showDeleteGroupDialog, setShowDeleteGroupDialog] = useState(false);
-  const [showLeaveGroupDialog, setShowLeaveGroupDialog] = useState(false);
-  const [groupNameExists, setGroupNameExists] = useState(false);
-  const [checkingGroupName, setCheckingGroupName] = useState(false);
-  const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
-  // Fetch current user
+  // Scroll to bottom of messages
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Get current user
   useEffect(() => {
-    const fetchCurrentUser = async () => {
+    const getCurrentUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        
-        if (!user) return;
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-            
-        if (profile) {
-          setCurrentUser({ ...user, ...profile });
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
           
-          // Create user profile in Firebase if it doesn't exist
-          const userProfileRef = doc(db, 'userProfiles', user.id);
-          const userProfileDoc = await getDoc(userProfileRef);
-          
-          if (!userProfileDoc.exists()) {
-            await setDoc(userProfileRef, {
-              name: profile.name || 'User',
-              username: profile.username || 'user',
-              avatar: profile.avatar || null,
-              createdAt: serverTimestamp()
-            });
-          }
+          setCurrentUser({ ...user, profile });
         }
       } catch (error) {
-        console.error('Error fetching current user:', error);
+        console.error('Error getting current user:', error);
       }
     };
-    
-    fetchCurrentUser();
+
+    getCurrentUser();
   }, []);
 
-  // Fetch groups when user is loaded
+  // Load user's groups
   useEffect(() => {
-    if (currentUser) {
-      fetchGroups();
-    }
-  }, [currentUser]);
+    if (!currentUser) return;
 
-  // Scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  // Set up real-time listeners for selected group
-  useEffect(() => {
-    if (!selectedGroup || !currentUser) return;
-    
-    // Listen for new messages
-    const messagesQuery = query(
-      collection(db, 'groupMessages'),
-      where('groupId', '==', selectedGroup.id),
-      orderBy('createdAt', 'asc')
-    );
-    
-    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
-      const newMessages: Message[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        
-        // Convert Firebase timestamp to Date
-        const createdAt = data.createdAt ? 
-          (typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : data.createdAt) : 
-          new Date();
-          
-        newMessages.push({
-          id: doc.id,
-          senderId: data.senderId,
-          content: data.content,
-          messageType: data.messageType || 'text',
-          createdAt: createdAt,
-          senderName: data.senderName || 'Unknown',
-          senderUsername: data.senderUsername || 'unknown',
-          senderAvatar: data.senderAvatar || null
-        });
-      });
-      
-      setMessages(newMessages);
-    });
-    
-    // Fetch group members
-    fetchGroupMembers(selectedGroup.id);
-    
-    return () => {
-      unsubscribe();
-    };
-  }, [selectedGroup, currentUser]);
-
-  // Check if group name exists when typing
-  useEffect(() => {
-    const checkGroupName = async () => {
-      if (!newGroupData.name.trim()) {
-        setGroupNameExists(false);
-        return;
-      }
-      
-      setCheckingGroupName(true);
-      
+    const loadGroups = async () => {
+      setLoading(true);
       try {
-        const groupsQuery = query(
-          collection(db, 'groups'),
-          where('name', '==', newGroupData.name.trim())
+        // Get groups where user is a member
+        const q = query(
+          collection(db, 'groupMembers'),
+          where('userId', '==', currentUser.id)
         );
         
-        const snapshot = await getDocs(groupsQuery);
-        setGroupNameExists(!snapshot.empty);
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
+          const membershipDocs = snapshot.docs;
+          const groupIds = membershipDocs.map(doc => doc.data().groupId);
+          
+          if (groupIds.length === 0) {
+            setMyGroups([]);
+            setLoading(false);
+            return;
+          }
+          
+          const myGroupsData: Group[] = [];
+          
+          // Get group details for each group
+          for (const groupId of groupIds) {
+            const groupDoc = await getDoc(doc(db, 'groups', groupId));
+            if (groupDoc.exists()) {
+              const groupData = groupDoc.data();
+              myGroupsData.push({
+                id: groupDoc.id,
+                name: groupData.name,
+                description: groupData.description,
+                avatar: groupData.avatar,
+                isPrivate: groupData.isPrivate,
+                createdBy: groupData.createdBy,
+                createdAt: groupData.createdAt,
+                memberCount: groupData.memberCount || 1
+              });
+            }
+          }
+          
+          setMyGroups(myGroupsData);
+          setLoading(false);
+        });
+        
+        return () => unsubscribe();
       } catch (error) {
-        console.error('Error checking group name:', error);
-      } finally {
-        setCheckingGroupName(false);
+        console.error('Error loading groups:', error);
+        setLoading(false);
       }
     };
     
-    const timeoutId = setTimeout(checkGroupName, 500);
-    return () => clearTimeout(timeoutId);
-  }, [newGroupData.name]);
+    loadGroups();
+  }, [currentUser]);
 
-  const fetchGroups = async () => {
-    try {
-      setLoading(true);
-      
-      // Query groups where the current user is a member
-      const memberOfQuery = query(
-        collection(db, 'groupMembers'),
-        where('userId', '==', currentUser.id)
-      );
-      
-      const membershipSnapshot = await getDocs(memberOfQuery);
-      const groupIds = membershipSnapshot.docs.map(doc => doc.data().groupId);
-      
-      if (groupIds.length === 0) {
-        setGroups([]);
-        setLoading(false);
-        return;
-      }
-      
-      // Get all groups the user is a member of
-      const groupsData: Group[] = [];
-      
-      for (const groupId of groupIds) {
-        const groupDoc = await getDoc(doc(db, 'groups', groupId));
+  // Load suggested groups
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadSuggestedGroups = async () => {
+      try {
+        // Get all public groups
+        const q = query(
+          collection(db, 'groups'),
+          where('isPrivate', '==', false)
+        );
         
-        if (groupDoc.exists()) {
-          const data = groupDoc.data();
-          
-          // Convert timestamps to Date objects
-          const createdAt = data.createdAt ? 
-            (typeof data.createdAt.toDate === 'function' ? data.createdAt.toDate() : data.createdAt) : 
-            new Date();
-            
-          const updatedAt = data.updatedAt ? 
-            (typeof data.updatedAt.toDate === 'function' ? data.updatedAt.toDate() : data.updatedAt) : 
-            new Date();
-            
-          const lastMessageTime = data.lastMessageTime ? 
-            (typeof data.lastMessageTime.toDate === 'function' ? data.lastMessageTime.toDate() : data.lastMessageTime) : 
-            null;
-            
-          groupsData.push({
-            id: groupDoc.id,
-            name: data.name,
-            description: data.description || '',
-            avatar: data.avatar || null,
-            isPrivate: data.isPrivate,
-            createdBy: data.createdBy,
-            createdAt: createdAt,
-            updatedAt: updatedAt,
-            memberCount: data.memberCount || 1,
-            maxMembers: data.maxMembers || 100,
-            lastMessage: data.lastMessage || '',
-            lastMessageTime: lastMessageTime
+        const querySnapshot = await getDocs(q);
+        const allGroups: Group[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const groupData = doc.data();
+          allGroups.push({
+            id: doc.id,
+            name: groupData.name,
+            description: groupData.description,
+            avatar: groupData.avatar,
+            isPrivate: groupData.isPrivate,
+            createdBy: groupData.createdBy,
+            createdAt: groupData.createdAt,
+            memberCount: groupData.memberCount || 1
           });
-        }
+        });
+        
+        // Filter out groups the user is already a member of
+        const myGroupIds = myGroups.map(g => g.id);
+        const filteredGroups = allGroups.filter(g => !myGroupIds.includes(g.id));
+        
+        setSuggestedGroups(filteredGroups);
+      } catch (error) {
+        console.error('Error loading suggested groups:', error);
       }
-      
-      // Sort by last activity
-      groupsData.sort((a, b) => {
-        const timeA = a.lastMessageTime ? a.lastMessageTime.getTime() : 
-                     a.updatedAt ? a.updatedAt.getTime() : 0;
-        const timeB = b.lastMessageTime ? b.lastMessageTime.getTime() : 
-                     b.updatedAt ? b.updatedAt.getTime() : 0;
-        return timeB - timeA;
-      });
-      
-      setGroups(groupsData);
-    } catch (error) {
-      console.error('Error fetching groups:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load groups'
-      });
-    } finally {
-      setLoading(false);
+    };
+    
+    if (myGroups.length > 0) {
+      loadSuggestedGroups();
     }
-  };
+  }, [currentUser, myGroups]);
 
-  const fetchGroupMembers = async (groupId: string) => {
+  // Load group members when a group is selected
+  useEffect(() => {
+    if (!selectedGroup) return;
+
+    const loadGroupMembers = async () => {
+      try {
+        const q = query(
+          collection(db, 'groupMembers'),
+          where('groupId', '==', selectedGroup.id)
+        );
+        
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
+          const memberDocs = snapshot.docs;
+          const membersData: GroupMember[] = [];
+          
+          for (const memberDoc of memberDocs) {
+            const memberData = memberDoc.data();
+            
+            // Get user profile from Supabase
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('name, username, avatar')
+              .eq('id', memberData.userId)
+              .single();
+            
+            membersData.push({
+              id: memberDoc.id,
+              groupId: memberData.groupId,
+              userId: memberData.userId,
+              role: memberData.role,
+              joinedAt: memberData.joinedAt,
+              profile: profile || undefined
+            });
+            
+            // Check if current user is admin
+            if (memberData.userId === currentUser?.id && memberData.role === 'admin') {
+              setIsAdmin(true);
+            }
+          }
+          
+          setGroupMembers(membersData);
+        });
+        
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Error loading group members:', error);
+      }
+    };
+    
+    loadGroupMembers();
+    
+    // Reset admin status when changing groups
+    setIsAdmin(false);
+  }, [selectedGroup, currentUser?.id]);
+
+  // Load messages when a group is selected
+  useEffect(() => {
+    if (!selectedGroup) return;
+
+    const loadMessages = async () => {
+      try {
+        const q = query(
+          collection(db, 'groupMessages'),
+          where('groupId', '==', selectedGroup.id),
+          orderBy('createdAt', 'asc')
+        );
+        
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
+          const messageDocs = snapshot.docs;
+          const messagesData: GroupMessage[] = [];
+          
+          for (const messageDoc of messageDocs) {
+            const messageData = messageDoc.data();
+            
+            // Get sender profile from Supabase
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('name, avatar')
+              .eq('id', messageData.senderId)
+              .single();
+            
+            messagesData.push({
+              id: messageDoc.id,
+              groupId: messageData.groupId,
+              senderId: messageData.senderId,
+              content: messageData.content,
+              messageType: messageData.messageType || 'text',
+              createdAt: messageData.createdAt,
+              senderName: profile?.name || 'Unknown User',
+              senderAvatar: profile?.avatar || undefined
+            });
+          }
+          
+          setMessages(messagesData);
+          
+          // Scroll to bottom after messages load
+          setTimeout(scrollToBottom, 100);
+        });
+        
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Error loading messages:', error);
+      }
+    };
+    
+    loadMessages();
+  }, [selectedGroup]);
+
+  // Load join requests for admin
+  useEffect(() => {
+    if (!selectedGroup || !isAdmin) return;
+
+    const loadJoinRequests = async () => {
+      try {
+        const q = query(
+          collection(db, 'groupJoinRequests'),
+          where('groupId', '==', selectedGroup.id),
+          where('status', '==', 'pending')
+        );
+        
+        const unsubscribe = onSnapshot(q, async (snapshot) => {
+          const requestDocs = snapshot.docs;
+          const requestsData: JoinRequest[] = [];
+          
+          for (const requestDoc of requestDocs) {
+            const requestData = requestDoc.data();
+            
+            // Get user profile from Supabase
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('name, username, avatar')
+              .eq('id', requestData.userId)
+              .single();
+            
+            requestsData.push({
+              id: requestDoc.id,
+              groupId: requestData.groupId,
+              userId: requestData.userId,
+              status: requestData.status,
+              message: requestData.message,
+              createdAt: requestData.createdAt,
+              profile: profile || undefined
+            });
+          }
+          
+          setJoinRequests(requestsData);
+        });
+        
+        return () => unsubscribe();
+      } catch (error) {
+        console.error('Error loading join requests:', error);
+      }
+    };
+    
+    loadJoinRequests();
+  }, [selectedGroup, isAdmin]);
+
+  // Check if group name is unique
+  const checkGroupNameUnique = async (name: string) => {
     try {
-      const membersQuery = query(
-        collection(db, 'groupMembers'),
-        where('groupId', '==', groupId)
+      const q = query(
+        collection(db, 'groups'),
+        where('name', '==', name)
       );
       
-      const membersSnapshot = await getDocs(membersQuery);
-      const membersData: GroupMember[] = [];
-      
-      for (const memberDoc of membersSnapshot.docs) {
-        const data = memberDoc.data();
-        
-        // Get user profile data from Supabase
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('name, username, avatar')
-          .eq('id', data.userId)
-          .single();
-        
-        // Convert timestamp to Date
-        const joinedAt = data.joinedAt ? 
-          (typeof data.joinedAt.toDate === 'function' ? data.joinedAt.toDate() : data.joinedAt) : 
-          new Date();
-        
-        membersData.push({
-          id: memberDoc.id,
-          userId: data.userId,
-          role: data.role,
-          joinedAt: joinedAt,
-          name: userProfile?.name || 'Unknown User',
-          username: userProfile?.username || 'unknown',
-          avatar: userProfile?.avatar || null
-        });
-      }
-      
-      // Sort members (admins first, then by join date)
-      membersData.sort((a, b) => {
-        if (a.role === 'admin' && b.role !== 'admin') return -1;
-        if (a.role !== 'admin' && b.role === 'admin') return 1;
-        
-        const timeA = a.joinedAt ? a.joinedAt.getTime() : 0;
-        const timeB = b.joinedAt ? b.joinedAt.getTime() : 0;
-        return timeA - timeB;
-      });
-      
-      setGroupMembers(membersData);
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.empty;
     } catch (error) {
-      console.error('Error fetching group members:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load group members'
-      });
+      console.error('Error checking group name:', error);
+      return false;
     }
   };
 
-  const handleSelectGroup = (group: Group) => {
-    setSelectedGroup(group);
-    setMessages([]);
-  };
-
+  // Create a new group
   const handleCreateGroup = async () => {
-    if (!newGroupData.name.trim() || !currentUser) return;
-    
-    // Check if group name already exists
-    if (groupNameExists) {
-      toast({
-        variant: 'destructive',
-        title: 'Group name already exists',
-        description: 'Please choose a different name for your group'
-      });
+    if (!newGroupName.trim()) {
+      setNameError('Group name is required');
       return;
     }
     
+    if (newGroupName.length < 3) {
+      setNameError('Group name must be at least 3 characters');
+      return;
+    }
+    
+    setCreatingGroup(true);
+    
     try {
-      setCreatingGroup(true);
+      // Check if group name is unique
+      const isUnique = await checkGroupNameUnique(newGroupName.trim());
       
-      // Create a new group document
+      if (!isUnique) {
+        setNameError('Group name already exists');
+        setCreatingGroup(false);
+        return;
+      }
+      
+      // Create group in Firestore
       const groupRef = await addDoc(collection(db, 'groups'), {
-        name: newGroupData.name.trim(),
-        description: newGroupData.description.trim(),
-        avatar: newGroupData.avatar || null,
-        isPrivate: true, // Always private
+        name: newGroupName.trim(),
+        description: newGroupDescription.trim(),
+        isPrivate: isPrivate,
         createdBy: currentUser.id,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        memberCount: 1,
-        maxMembers: 100
+        memberCount: 1
       });
       
       // Add creator as admin member
-      await addDoc(collection(db, 'groupMembers'), {
+      await setDoc(doc(db, 'groupMembers', `${currentUser.id}_${groupRef.id}`), {
         groupId: groupRef.id,
         userId: currentUser.id,
         role: 'admin',
         joinedAt: serverTimestamp()
       });
       
-      // Create user profile document if it doesn't exist
-      const userProfileRef = doc(db, 'userProfiles', currentUser.id);
-      const userProfileDoc = await getDoc(userProfileRef);
-      
-      if (!userProfileDoc.exists()) {
-        await setDoc(userProfileRef, {
-          name: currentUser.name || 'User',
-          username: currentUser.username || 'user',
-          avatar: currentUser.avatar || null,
-          createdAt: serverTimestamp()
-        });
-      }
-      
-      // Also store group ID in user's groups list
-      await updateDoc(userProfileRef, {
-        groups: arrayUnion(groupRef.id)
-      });
+      // Reset form
+      setNewGroupName('');
+      setNewGroupDescription('');
+      setIsPrivate(true);
+      setShowCreateDialog(false);
       
       toast({
         title: 'Group created',
-        description: 'Your group has been created successfully!'
+        description: 'Your group has been created successfully',
       });
       
-      // Refresh groups list
-      fetchGroups();
-      
-      // Reset form and close dialog
-      setNewGroupData({
-        name: '',
-        description: '',
-        avatar: ''
-      });
-      setShowCreateDialog(false);
-      
-      // Select the newly created group
+      // Select the new group
       const newGroup = {
         id: groupRef.id,
-        name: newGroupData.name.trim(),
-        description: newGroupData.description.trim(),
-        avatar: newGroupData.avatar || null,
-        isPrivate: true,
+        name: newGroupName.trim(),
+        description: newGroupDescription.trim(),
+        isPrivate: isPrivate,
         createdBy: currentUser.id,
         createdAt: new Date(),
-        updatedAt: new Date(),
-        memberCount: 1,
-        maxMembers: 100
+        memberCount: 1
       };
       
       setSelectedGroup(newGroup);
-      
+      setMyGroups(prev => [...prev, newGroup]);
     } catch (error) {
       console.error('Error creating group:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to create group. Please try again.'
+        description: 'Failed to create group. Please try again.',
       });
     } finally {
       setCreatingGroup(false);
     }
   };
 
+  // Send a message
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedGroup || !currentUser || sendingMessage) return;
+    if (!newMessage.trim() || !selectedGroup || sendingMessage) return;
+    
+    setSendingMessage(true);
     
     try {
-      setSendingMessage(true);
-      
-      // Add message to Firestore
-      const messageData = {
+      await addDoc(collection(db, 'groupMessages'), {
         groupId: selectedGroup.id,
         senderId: currentUser.id,
         content: newMessage.trim(),
         messageType: 'text',
-        createdAt: serverTimestamp(),
-        senderName: currentUser.name,
-        senderUsername: currentUser.username,
-        senderAvatar: currentUser.avatar
-      };
-
-      const messageRef = await addDoc(collection(db, 'groupMessages'), messageData);
-      
-      // Update group's last message and time
-      await updateDoc(doc(db, 'groups', selectedGroup.id), {
-        lastMessage: newMessage.trim(),
-        lastMessageTime: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        createdAt: serverTimestamp()
       });
       
-      // Clear input
       setNewMessage('');
       
-      // Store in local storage for offline access
-      const localMessages = JSON.parse(localStorage.getItem(`group_messages_${selectedGroup.id}`) || '[]');
-      localMessages.push({
-        id: messageRef.id,
-        senderId: currentUser.id,
-        content: newMessage.trim(),
-        messageType: 'text',
-        createdAt: new Date(),
-        senderName: currentUser.name,
-        senderUsername: currentUser.username,
-        senderAvatar: currentUser.avatar
-      });
-      localStorage.setItem(`group_messages_${selectedGroup.id}`, JSON.stringify(localMessages));
-      
+      // No need to manually update messages as the onSnapshot listener will handle it
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to send message'
+        description: 'Failed to send message. Please try again.',
       });
-      
-      // Store in local storage for later sync
-      const pendingMessages = JSON.parse(localStorage.getItem('pending_group_messages') || '[]');
-      pendingMessages.push({
-        groupId: selectedGroup.id,
-        content: newMessage.trim(),
-        createdAt: new Date()
-      });
-      localStorage.setItem('pending_group_messages', JSON.stringify(pendingMessages));
-      
-      // Show in UI optimistically
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        senderId: currentUser.id,
-        content: newMessage.trim(),
-        messageType: 'text',
-        createdAt: new Date(),
-        senderName: currentUser.name,
-        senderUsername: currentUser.username,
-        senderAvatar: currentUser.avatar
-      }]);
-      
-      setNewMessage('');
     } finally {
       setSendingMessage(false);
     }
   };
 
+  // Delete a group
   const handleDeleteGroup = async () => {
-    if (!selectedGroup || !currentUser || selectedGroup.createdBy !== currentUser.id) return;
+    if (!selectedGroup || !isAdmin) return;
     
     try {
-      // Delete all group messages
+      // Delete group messages
       const messagesQuery = query(
         collection(db, 'groupMessages'),
         where('groupId', '==', selectedGroup.id)
@@ -593,7 +548,7 @@ export function Vortex() {
       const deleteMessagePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
       await Promise.all(deleteMessagePromises);
       
-      // Delete all group members
+      // Delete group members
       const membersQuery = query(
         collection(db, 'groupMembers'),
         where('groupId', '==', selectedGroup.id)
@@ -603,71 +558,45 @@ export function Vortex() {
       const deleteMemberPromises = membersSnapshot.docs.map(doc => deleteDoc(doc.ref));
       await Promise.all(deleteMemberPromises);
       
-      // Delete the group
+      // Delete join requests
+      const requestsQuery = query(
+        collection(db, 'groupJoinRequests'),
+        where('groupId', '==', selectedGroup.id)
+      );
+      
+      const requestsSnapshot = await getDocs(requestsQuery);
+      const deleteRequestPromises = requestsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deleteRequestPromises);
+      
+      // Delete group
       await deleteDoc(doc(db, 'groups', selectedGroup.id));
       
       toast({
         title: 'Group deleted',
-        description: 'The group has been permanently deleted'
+        description: 'The group has been deleted successfully',
       });
       
       // Update UI
-      setGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
       setSelectedGroup(null);
-      setShowDeleteGroupDialog(false);
-      
+      setMyGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
+      setShowDeleteDialog(false);
     } catch (error) {
       console.error('Error deleting group:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to delete group'
+        description: 'Failed to delete group. Please try again.',
       });
     }
   };
 
+  // Leave a group
   const handleLeaveGroup = async () => {
     if (!selectedGroup || !currentUser) return;
     
     try {
-      // Find the member document
-      const membersQuery = query(
-        collection(db, 'groupMembers'),
-        where('groupId', '==', selectedGroup.id),
-        where('userId', '==', currentUser.id)
-      );
-      
-      const membersSnapshot = await getDocs(membersQuery);
-      
-      if (membersSnapshot.empty) {
-        throw new Error('Member not found');
-      }
-      
-      // Check if user is the only admin
-      if (selectedGroup.createdBy === currentUser.id) {
-        // Count other admins
-        const adminsQuery = query(
-          collection(db, 'groupMembers'),
-          where('groupId', '==', selectedGroup.id),
-          where('role', '==', 'admin')
-        );
-        
-        const adminsSnapshot = await getDocs(adminsQuery);
-        const otherAdmins = adminsSnapshot.docs.filter(doc => doc.data().userId !== currentUser.id);
-        
-        if (otherAdmins.length === 0) {
-          toast({
-            variant: 'destructive',
-            title: 'Cannot leave group',
-            description: 'You are the only admin. Please delete the group or make someone else an admin first.'
-          });
-          setShowLeaveGroupDialog(false);
-          return;
-        }
-      }
-      
-      // Delete the member document
-      await deleteDoc(membersSnapshot.docs[0].ref);
+      // Delete member record
+      await deleteDoc(doc(db, 'groupMembers', `${currentUser.id}_${selectedGroup.id}`));
       
       // Update group member count
       await updateDoc(doc(db, 'groups', selectedGroup.id), {
@@ -676,85 +605,159 @@ export function Vortex() {
       
       toast({
         title: 'Left group',
-        description: 'You have left the group successfully'
+        description: 'You have left the group successfully',
       });
       
       // Update UI
-      setGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
       setSelectedGroup(null);
-      setShowLeaveGroupDialog(false);
-      
+      setMyGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
+      setShowLeaveDialog(false);
     } catch (error) {
       console.error('Error leaving group:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to leave group'
+        description: 'Failed to leave group. Please try again.',
       });
     }
   };
 
-  const formatMessageTime = (dateString: any) => {
-    if (!dateString) return '';
+  // Join a group
+  const handleJoinGroup = async (group: Group) => {
+    if (!currentUser) return;
     
-    const date = dateString instanceof Date ? dateString : new Date(dateString);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatDate = (dateString: any) => {
-    if (!dateString) return 'Today';
-    
-    const date = dateString instanceof Date ? dateString : new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
-    } else {
-      return date.toLocaleDateString();
+    try {
+      if (group.isPrivate) {
+        // For private groups, create a join request
+        setSelectedGroup(group);
+        setShowJoinRequestDialog(true);
+      } else {
+        // For public groups, join directly
+        await setDoc(doc(db, 'groupMembers', `${currentUser.id}_${group.id}`), {
+          groupId: group.id,
+          userId: currentUser.id,
+          role: 'member',
+          joinedAt: serverTimestamp()
+        });
+        
+        // Update group member count
+        await updateDoc(doc(db, 'groups', group.id), {
+          memberCount: group.memberCount + 1
+        });
+        
+        toast({
+          title: 'Joined group',
+          description: 'You have joined the group successfully',
+        });
+        
+        // Update UI
+        const updatedGroup = { ...group, memberCount: group.memberCount + 1 };
+        setMyGroups(prev => [...prev, updatedGroup]);
+        setSuggestedGroups(prev => prev.filter(g => g.id !== group.id));
+        setSelectedGroup(updatedGroup);
+      }
+    } catch (error) {
+      console.error('Error joining group:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to join group. Please try again.',
+      });
     }
   };
 
-  const getDateSeparatorText = (date: string) => {
-    if (date === 'Today') return 'Today';
-    if (date === 'Yesterday') return 'Yesterday';
-    return date;
-  };
-
-  const truncateMessage = (message: string, maxLength: number = 30) => {
-    if (message.length <= maxLength) return message;
-    return message.substring(0, maxLength) + '...';
-  };
-
-  const filteredGroups = groups.filter(group => 
-    group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    group.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Group messages by date for better display
-  const groupedMessages = React.useMemo(() => {
-    const groups: { [key: string]: Message[] } = {};
+  // Send join request
+  const handleSendJoinRequest = async () => {
+    if (!selectedGroup || !currentUser) return;
     
-    messages.forEach(message => {
-      const date = formatDate(message.createdAt);
-      if (!groups[date]) {
-        groups[date] = [];
+    try {
+      await setDoc(doc(db, 'groupJoinRequests', `${currentUser.id}_${selectedGroup.id}`), {
+        groupId: selectedGroup.id,
+        userId: currentUser.id,
+        status: 'pending',
+        message: joinRequestMessage.trim(),
+        createdAt: serverTimestamp()
+      });
+      
+      toast({
+        title: 'Request sent',
+        description: 'Your request to join the group has been sent',
+      });
+      
+      setJoinRequestMessage('');
+      setShowJoinRequestDialog(false);
+    } catch (error) {
+      console.error('Error sending join request:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to send join request. Please try again.',
+      });
+    }
+  };
+
+  // Handle join request response (approve/reject)
+  const handleJoinRequestResponse = async (request: JoinRequest, approve: boolean) => {
+    try {
+      if (approve) {
+        // Add user as member
+        await setDoc(doc(db, 'groupMembers', `${request.userId}_${request.groupId}`), {
+          groupId: request.groupId,
+          userId: request.userId,
+          role: 'member',
+          joinedAt: serverTimestamp()
+        });
+        
+        // Update group member count
+        await updateDoc(doc(db, 'groups', request.groupId), {
+          memberCount: selectedGroup!.memberCount + 1
+        });
+        
+        toast({
+          title: 'Request approved',
+          description: 'The join request has been approved',
+        });
+      } else {
+        toast({
+          title: 'Request rejected',
+          description: 'The join request has been rejected',
+        });
       }
-      groups[date].push(message);
-    });
-    
-    return Object.entries(groups).map(([date, messages]) => ({
-      date,
-      messages
-    }));
-  }, [messages]);
+      
+      // Update request status
+      await updateDoc(doc(db, 'groupJoinRequests', request.id), {
+        status: approve ? 'approved' : 'rejected'
+      });
+      
+      // Update UI
+      setJoinRequests(prev => prev.filter(r => r.id !== request.id));
+    } catch (error) {
+      console.error('Error handling join request:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to process join request. Please try again.',
+      });
+    }
+  };
 
-  const isCurrentUserAdmin = selectedGroup && groupMembers.some(
-    member => member.userId === currentUser?.id && member.role === 'admin'
-  );
+  // Format timestamp
+  const formatTimestamp = (timestamp: any) => {
+    if (!timestamp) return '';
+    
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return formatDistanceToNow(date, { addSuffix: true });
+  };
+
+  // Filter groups by search query
+  const filteredGroups = (groups: Group[]) => {
+    if (!searchQuery.trim()) return groups;
+    
+    return groups.filter(group => 
+      group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (group.description && group.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  };
 
   return (
     <DashboardLayout>
@@ -762,426 +765,483 @@ export function Vortex() {
         <div className="flex h-full">
           {/* Groups List */}
           <div className={`w-full md:w-80 border-r flex flex-col ${selectedGroup ? 'hidden md:flex' : ''}`}>
-            {/* Groups List Header */}
+            {/* Header */}
             <div className="p-3 border-b bg-muted/30 flex-shrink-0">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-red-500" />
+                  <Zap className="h-5 w-5 text-social-purple" />
                   <h2 className="font-pixelated text-sm font-medium">Vortex Groups</h2>
                 </div>
                 <Button
-                  size="sm"
                   onClick={() => setShowCreateDialog(true)}
-                  className="h-8 w-8 p-0 rounded-full bg-social-green hover:bg-social-light-green text-white"
+                  size="icon"
+                  className="h-7 w-7 rounded-full bg-social-purple hover:bg-social-purple/90 text-white"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
-              
               <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search groups..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-3 h-8 font-pixelated text-xs"
+                  className="pl-8 h-8 font-pixelated text-xs"
                 />
               </div>
             </div>
 
-            {/* Groups List - Scrollable */}
-            <div className="flex-1 overflow-hidden">
-              <ScrollArea className="h-full">
-                {loading ? (
-                  <div className="space-y-2 p-3">
-                    {[1, 2, 3].map(i => (
-                      <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
-                        <div className="h-10 w-10 rounded-full bg-muted" />
-                        <div className="flex-1">
-                          <div className="h-3 w-20 bg-muted rounded mb-1" />
-                          <div className="h-2 w-24 bg-muted rounded" />
+            {/* Groups List - Tabs */}
+            <Tabs defaultValue="myGroups" className="flex-1 flex flex-col">
+              <TabsList className="grid grid-cols-2 mx-3 mt-3">
+                <TabsTrigger value="myGroups" className="font-pixelated text-xs">My Groups</TabsTrigger>
+                <TabsTrigger value="discover" className="font-pixelated text-xs">Discover</TabsTrigger>
+              </TabsList>
+              
+              {/* My Groups Tab */}
+              <TabsContent value="myGroups" className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full">
+                  {loading ? (
+                    <div className="p-3 space-y-2">
+                      {[1, 2, 3].map(i => (
+                        <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
+                          <div className="h-10 w-10 rounded-full bg-muted" />
+                          <div className="flex-1">
+                            <div className="h-3 w-20 bg-muted rounded mb-1" />
+                            <div className="h-2 w-24 bg-muted rounded" />
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : filteredGroups.length > 0 ? (
-                  <div className="p-2">
-                    {filteredGroups.map(group => (
-                      <div
-                        key={group.id}
-                        onClick={() => handleSelectGroup(group)}
-                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 ${
-                          selectedGroup?.id === group.id ? 'bg-accent shadow-md' : ''
-                        }`}
-                      >
-                        <Avatar className="h-10 w-10 border-2 border-background flex-shrink-0">
-                          {group.avatar ? (
-                            <AvatarImage src={group.avatar} />
-                          ) : (
-                            <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                              {group.name.substring(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium truncate text-sm font-pixelated">
-                              {group.name}
-                            </p>
-                            {group.isPrivate && (
-                              <Lock className="h-3 w-3 text-muted-foreground" />
+                      ))}
+                    </div>
+                  ) : filteredGroups(myGroups).length > 0 ? (
+                    <div className="p-2">
+                      {filteredGroups(myGroups).map(group => (
+                        <div
+                          key={group.id}
+                          onClick={() => setSelectedGroup(group)}
+                          className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 ${
+                            selectedGroup?.id === group.id ? 'bg-accent shadow-md' : ''
+                          }`}
+                        >
+                          <Avatar className="h-10 w-10 border-2 border-background">
+                            {group.avatar ? (
+                              <AvatarImage src={group.avatar} />
+                            ) : (
+                              <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
+                                {group.name.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
                             )}
+                          </Avatar>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1">
+                              <p className="font-medium truncate text-sm font-pixelated">
+                                {group.name}
+                              </p>
+                              {group.isPrivate && (
+                                <Lock className="h-3 w-3 text-muted-foreground" />
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate font-pixelated">
+                              {group.memberCount} {group.memberCount === 1 ? 'member' : 'members'}
+                            </p>
                           </div>
                           
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs truncate font-pixelated text-muted-foreground">
-                              {group.lastMessage ? (
-                                truncateMessage(group.lastMessage)
-                              ) : (
-                                `${group.memberCount} members`
-                              )}
-                            </p>
-                            
-                            {group.lastMessageTime && (
-                              <span className="text-xs text-muted-foreground font-pixelated">
-                                {formatMessageTime(group.lastMessageTime)}
-                              </span>
-                            )}
-                          </div>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                    <Zap className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground mb-4 font-pixelated text-sm">No groups found</p>
-                    <Button 
-                      onClick={() => setShowCreateDialog(true)}
-                      className="font-pixelated text-xs"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create Group
-                    </Button>
-                  </div>
-                )}
-              </ScrollArea>
-            </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                      <Zap className="h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground mb-4 font-pixelated text-sm">No groups yet</p>
+                      <Button 
+                        onClick={() => setShowCreateDialog(true)}
+                        variant="outline" 
+                        className="font-pixelated text-xs"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Create Group
+                      </Button>
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+              
+              {/* Discover Tab */}
+              <TabsContent value="discover" className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full">
+                  {suggestedGroups.length > 0 ? (
+                    <div className="p-2">
+                      {filteredGroups(suggestedGroups).map(group => (
+                        <div
+                          key={group.id}
+                          className="flex items-center gap-3 p-2 rounded-lg transition-all duration-200 hover:bg-accent/50"
+                        >
+                          <Avatar className="h-10 w-10 border-2 border-background">
+                            {group.avatar ? (
+                              <AvatarImage src={group.avatar} />
+                            ) : (
+                              <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
+                                {group.name.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            )}
+                          </Avatar>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1">
+                              <p className="font-medium truncate text-sm font-pixelated">
+                                {group.name}
+                              </p>
+                              {group.isPrivate ? (
+                                <Lock className="h-3 w-3 text-muted-foreground" />
+                              ) : (
+                                <Globe className="h-3 w-3 text-muted-foreground" />
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate font-pixelated">
+                              {group.description || `${group.memberCount} members`}
+                            </p>
+                          </div>
+                          
+                          <Button
+                            onClick={() => handleJoinGroup(group)}
+                            size="sm"
+                            className="h-7 bg-social-purple hover:bg-social-purple/90 text-white font-pixelated text-xs"
+                          >
+                            <UserPlus className="h-3 w-3 mr-1" />
+                            Join
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                      <Globe className="h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground mb-4 font-pixelated text-sm">No groups to discover</p>
+                      <Button 
+                        onClick={() => setShowCreateDialog(true)}
+                        variant="outline" 
+                        className="font-pixelated text-xs"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Create Group
+                      </Button>
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           </div>
 
-          {/* Group Chat Area */}
+          {/* Chat Area */}
           <div className={`flex-1 flex flex-col h-full ${!selectedGroup ? 'hidden md:flex' : ''}`}>
             {selectedGroup ? (
               <>
                 {/* Group Header */}
-                <div className="flex items-center gap-3 p-3 border-b bg-muted/30 flex-shrink-0">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => setSelectedGroup(null)}
-                    className="md:hidden flex-shrink-0 h-8 w-8"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <Avatar className="h-8 w-8 flex-shrink-0">
-                    {selectedGroup.avatar ? (
-                      <AvatarImage src={selectedGroup.avatar} />
-                    ) : (
-                      <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                        {selectedGroup.name.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium truncate text-sm font-pixelated">
-                        {selectedGroup.name}
-                      </p>
-                      {selectedGroup.isPrivate ? (
-                        <Badge variant="outline" className="h-5 px-1 text-xs font-pixelated">
-                          <Lock className="h-2 w-2 mr-1" />
-                          Private
-                        </Badge>
+                <div className="flex items-center justify-between p-3 border-b bg-muted/30">
+                  <div className="flex items-center gap-3">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => setSelectedGroup(null)}
+                      className="md:hidden h-8 w-8"
+                    >
+                      <ChevronRight className="h-4 w-4 rotate-180" />
+                    </Button>
+                    <Avatar className="h-8 w-8">
+                      {selectedGroup.avatar ? (
+                        <AvatarImage src={selectedGroup.avatar} />
                       ) : (
-                        <Badge variant="outline" className="h-5 px-1 text-xs font-pixelated">
-                          <Globe className="h-2 w-2 mr-1" />
-                          Public
-                        </Badge>
+                        <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
+                          {selectedGroup.name.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
                       )}
+                    </Avatar>
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <p className="font-medium text-sm font-pixelated">{selectedGroup.name}</p>
+                        {selectedGroup.isPrivate && (
+                          <Lock className="h-3 w-3 text-muted-foreground" />
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground font-pixelated">
+                        {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate font-pixelated">
-                      {selectedGroup.memberCount} members
-                    </p>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <Settings className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem 
-                        className="font-pixelated text-xs cursor-pointer"
-                        onClick={() => {}}
-                        disabled
+                  
+                  <div className="flex items-center gap-2">
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                        >
+                          <Users className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle className="font-pixelated text-sm">Group Members</DialogTitle>
+                        </DialogHeader>
+                        <div className="max-h-[300px] overflow-y-auto">
+                          {groupMembers.map(member => (
+                            <div key={member.id} className="flex items-center justify-between py-2">
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-8 w-8">
+                                  {member.profile?.avatar ? (
+                                    <AvatarImage src={member.profile.avatar} />
+                                  ) : (
+                                    <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
+                                      {member.profile?.name?.substring(0, 2).toUpperCase() || 'U'}
+                                    </AvatarFallback>
+                                  )}
+                                </Avatar>
+                                <div>
+                                  <p className="font-pixelated text-xs font-medium">
+                                    {member.profile?.name || 'Unknown User'}
+                                  </p>
+                                  <p className="font-pixelated text-xs text-muted-foreground">
+                                    @{member.profile?.username || 'unknown'}
+                                  </p>
+                                </div>
+                              </div>
+                              <Badge variant={member.role === 'admin' ? 'default' : 'outline'} className="font-pixelated text-xs">
+                                {member.role}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    
+                    {isAdmin && joinRequests.length > 0 && (
+                      <Button
+                        onClick={() => setShowJoinRequestDialog(true)}
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 relative"
                       >
-                        <Users className="h-4 w-4 mr-2" />
-                        View Members
-                      </DropdownMenuItem>
-                      
-                      {selectedGroup.createdBy === currentUser?.id && (
-                        <DropdownMenuItem 
-                          className="font-pixelated text-xs cursor-pointer text-destructive"
-                          onClick={() => setShowDeleteGroupDialog(true)}
+                        <UserPlus className="h-4 w-4" />
+                        <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center">
+                          {joinRequests.length}
+                        </span>
+                      </Button>
+                    )}
+                    
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
                         >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Group
-                        </DropdownMenuItem>
-                      )}
-                      
-                      {selectedGroup.createdBy !== currentUser?.id && (
-                        <DropdownMenuItem 
-                          className="font-pixelated text-xs cursor-pointer text-destructive"
-                          onClick={() => setShowLeaveGroupDialog(true)}
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Leave Group
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                          <Info className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle className="font-pixelated text-sm">Group Info</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <h3 className="font-pixelated text-xs font-medium mb-1">Description</h3>
+                            <p className="font-pixelated text-xs text-muted-foreground">
+                              {selectedGroup.description || 'No description provided'}
+                            </p>
+                          </div>
+                          <div>
+                            <h3 className="font-pixelated text-xs font-medium mb-1">Created</h3>
+                            <p className="font-pixelated text-xs text-muted-foreground">
+                              {formatTimestamp(selectedGroup.createdAt)}
+                            </p>
+                          </div>
+                          <div>
+                            <h3 className="font-pixelated text-xs font-medium mb-1">Privacy</h3>
+                            <div className="flex items-center gap-1">
+                              {selectedGroup.isPrivate ? (
+                                <>
+                                  <Lock className="h-3 w-3 text-muted-foreground" />
+                                  <p className="font-pixelated text-xs text-muted-foreground">Private</p>
+                                </>
+                              ) : (
+                                <>
+                                  <Globe className="h-3 w-3 text-muted-foreground" />
+                                  <p className="font-pixelated text-xs text-muted-foreground">Public</p>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="pt-4 flex flex-col gap-2">
+                            {isAdmin ? (
+                              <Button
+                                onClick={() => {
+                                  setShowDeleteDialog(true);
+                                }}
+                                variant="destructive"
+                                className="font-pixelated text-xs"
+                              >
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Delete Group
+                              </Button>
+                            ) : (
+                              <Button
+                                onClick={() => {
+                                  setShowLeaveDialog(true);
+                                }}
+                                variant="destructive"
+                                className="font-pixelated text-xs"
+                              >
+                                <LogOut className="h-3 w-3 mr-1" />
+                                Leave Group
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
 
-                {/* Group Tabs */}
-                <Tabs defaultValue="chat" className="flex-1 flex flex-col">
-                  <TabsList className="px-3 pt-2 justify-start border-b rounded-none bg-transparent">
-                    <TabsTrigger 
-                      value="chat" 
-                      className="font-pixelated text-xs data-[state=active]:bg-transparent"
-                    >
-                      <MessageSquare className="h-4 w-4 mr-1" />
-                      Chat
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="members" 
-                      className="font-pixelated text-xs data-[state=active]:bg-transparent"
-                    >
-                      <Users className="h-4 w-4 mr-1" />
-                      Members
-                    </TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="chat" className="flex-1 flex flex-col p-0 m-0">
-                    {/* Messages Area */}
-                    <div className="flex-1 overflow-hidden">
-                      <ScrollArea 
-                        ref={messagesContainerRef}
-                        className="h-full scroll-smooth"
-                      >
-                        <div className="p-3 space-y-4">
-                          {groupedMessages.length > 0 ? (
-                            <>
-                              {groupedMessages.map((group, groupIndex) => (
-                                <div key={groupIndex} className="space-y-2">
-                                  {/* Date Separator */}
-                                  <div className="flex justify-center my-2">
-                                    <Badge variant="outline" className="font-pixelated text-xs">
-                                      {getDateSeparatorText(group.date)}
-                                    </Badge>
-                                  </div>
-                                  
-                                  {/* Messages for this date */}
-                                  {group.messages.map((message) => {
-                                    const isCurrentUser = message.senderId === currentUser?.id;
-                                    
-                                    return (
-                                      <div 
-                                        key={message.id}
-                                        className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
-                                      >
-                                        <div className={`flex gap-2 max-w-[80%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                          <Avatar className="h-8 w-8 mt-1">
-                                            {message.senderAvatar ? (
-                                              <AvatarImage src={message.senderAvatar} />
-                                            ) : (
-                                              <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                                                {message.senderName.substring(0, 2).toUpperCase()}
-                                              </AvatarFallback>
-                                            )}
-                                          </Avatar>
-                                          <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                              <p className="text-xs font-pixelated font-medium">
-                                                {isCurrentUser ? 'You' : message.senderName}
-                                              </p>
-                                              <span className="text-xs text-muted-foreground font-pixelated">
-                                                {formatMessageTime(message.createdAt)}
-                                              </span>
-                                            </div>
-                                            <div className={`p-3 rounded-lg ${
-                                              isCurrentUser 
-                                                ? 'bg-social-green text-white' 
-                                                : 'bg-muted'
-                                            }`}>
-                                              <p className="text-sm font-pixelated whitespace-pre-wrap break-words">
-                                                {message.content}
-                                              </p>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
+                {/* Messages Area */}
+                <div className="flex-1 overflow-hidden">
+                  <ScrollArea className="h-full p-4">
+                    {messages.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full">
+                        <MessageSquare className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                        <h3 className="font-pixelated text-sm font-medium mb-2">No messages yet</h3>
+                        <p className="font-pixelated text-xs text-muted-foreground text-center max-w-sm">
+                          Be the first to send a message in this group!
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {messages.map((message) => {
+                          const isCurrentUser = message.senderId === currentUser?.id;
+                          
+                          return (
+                            <div 
+                              key={message.id}
+                              className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
+                            >
+                              <div className={`flex gap-2 max-w-[75%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+                                <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
+                                  {message.senderAvatar ? (
+                                    <AvatarImage src={message.senderAvatar} />
+                                  ) : (
+                                    <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
+                                      {message.senderName?.substring(0, 2).toUpperCase() || 'U'}
+                                    </AvatarFallback>
+                                  )}
+                                </Avatar>
+                                <div 
+                                  className={`p-3 rounded-lg relative ${
+                                    isCurrentUser 
+                                      ? 'bg-social-purple text-white' 
+                                      : 'bg-muted'
+                                  }`}
+                                >
+                                  {!isCurrentUser && (
+                                    <p className="font-pixelated text-xs font-medium mb-1">
+                                      {message.senderName}
+                                    </p>
+                                  )}
+                                  <p className="font-pixelated text-xs whitespace-pre-wrap break-words">
+                                    {message.content}
+                                  </p>
+                                  <p className="font-pixelated text-xs opacity-70 mt-1 text-right">
+                                    {formatTimestamp(message.createdAt)}
+                                  </p>
                                 </div>
-                              ))}
-                              <div ref={messagesEndRef} />
-                            </>
-                          ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-center">
-                              <MessageSquare className="h-16 w-16 text-muted-foreground mb-4" />
-                              <h3 className="font-pixelated text-sm font-medium mb-2">No messages yet</h3>
-                              <p className="font-pixelated text-xs text-muted-foreground max-w-sm">
-                                Be the first to send a message in this group!
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </ScrollArea>
-                    </div>
-                    
-                    {/* Message Input */}
-                    <div className="p-3 border-t">
-                      <div className="flex gap-2 items-end">
-                        <Textarea
-                          placeholder="Type a message..."
-                          value={newMessage}
-                          onChange={(e) => setNewMessage(e.target.value)}
-                          className="flex-1 min-h-[60px] max-h-[120px] font-pixelated text-xs resize-none"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              handleSendMessage();
-                            }
-                          }}
-                          disabled={sendingMessage}
-                        />
-                        <Button
-                          onClick={handleSendMessage}
-                          disabled={!newMessage.trim() || sendingMessage}
-                          className="bg-social-green hover:bg-social-light-green text-white flex-shrink-0 h-[60px] w-12"
-                        >
-                          {sendingMessage ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground font-pixelated mt-1">
-                        Press Enter to send, Shift + Enter for new line
-                      </p>
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="members" className="p-3 m-0">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-pixelated text-sm font-medium">Members ({groupMembers.length})</h3>
-                        <Button 
-                          size="sm" 
-                          className="h-8 font-pixelated text-xs"
-                          disabled
-                        >
-                          <UserPlus className="h-3 w-3 mr-1" />
-                          Invite
-                        </Button>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {groupMembers.map(member => (
-                          <div key={member.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <Avatar className="h-8 w-8">
-                                {member.avatar ? (
-                                  <AvatarImage src={member.avatar} />
-                                ) : (
-                                  <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                                    {member.name.substring(0, 2).toUpperCase()}
-                                  </AvatarFallback>
-                                )}
-                              </Avatar>
-                              <div>
-                                <p className="font-pixelated text-xs font-medium">
-                                  {member.name} {member.userId === currentUser?.id && '(You)'}
-                                </p>
-                                <p className="font-pixelated text-xs text-muted-foreground">
-                                  @{member.username}
-                                </p>
                               </div>
                             </div>
-                            <Badge variant={member.role === 'admin' ? 'default' : 'outline'} className="font-pixelated text-xs">
-                              {member.role === 'admin' ? 'Admin' : 'Member'}
-                            </Badge>
-                          </div>
-                        ))}
+                          );
+                        })}
+                        <div ref={messagesEndRef} />
                       </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                    )}
+                  </ScrollArea>
+                </div>
+
+                {/* Message Input */}
+                <div className="border-t p-3">
+                  <div className="flex gap-2">
+                    <Textarea
+                      placeholder="Type a message..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      className="min-h-[60px] max-h-[120px] font-pixelated text-xs resize-none"
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={!newMessage.trim() || sendingMessage}
+                      className="bg-social-purple hover:bg-social-purple/90 text-white self-end"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <div className="mb-6">
-                  <Zap className="h-16 w-16 text-red-500 mb-4 mx-auto" />
-                  <h2 className="text-2xl font-bold mb-2 font-pixelated">Vortex Groups</h2>
-                  <p className="text-muted-foreground font-pixelated text-sm max-w-md mx-auto">
-                    Create or join group chats to collaborate with friends, colleagues, or communities.
-                  </p>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl w-full mb-6">
-                  <Card className="hover:shadow-md transition-all duration-200 hover-scale">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                          <Plus className="h-5 w-5 text-red-500" />
+                <Zap className="h-16 w-16 text-social-purple mb-6" />
+                <h2 className="text-xl font-bold mb-2 font-pixelated">Welcome to Vortex</h2>
+                <p className="text-muted-foreground mb-6 font-pixelated text-sm max-w-md">
+                  Create or join groups to chat with multiple people at once. Collaborate with friends, family, or communities.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md">
+                  <Card className="hover:shadow-md transition-all duration-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 rounded-full bg-social-purple/10 flex items-center justify-center mb-3">
+                          <Plus className="h-6 w-6 text-social-purple" />
                         </div>
-                        <div>
-                          <h3 className="font-pixelated text-sm font-medium">Create a Group</h3>
-                          <p className="font-pixelated text-xs text-muted-foreground">
-                            Start your own community
-                          </p>
-                        </div>
+                        <h3 className="font-pixelated text-sm font-medium mb-1">Create Group</h3>
+                        <p className="font-pixelated text-xs text-muted-foreground mb-3">
+                          Start your own community
+                        </p>
+                        <Button 
+                          onClick={() => setShowCreateDialog(true)}
+                          className="bg-social-purple hover:bg-social-purple/90 text-white font-pixelated text-xs w-full"
+                        >
+                          Create Group
+                        </Button>
                       </div>
-                      <Button 
-                        onClick={() => setShowCreateDialog(true)}
-                        className="w-full font-pixelated text-xs"
-                      >
-                        Create Group
-                      </Button>
                     </CardContent>
                   </Card>
                   
-                  <Card className="hover:shadow-md transition-all duration-200 hover-scale">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <Users className="h-5 w-5 text-blue-500" />
+                  <Card className="hover:shadow-md transition-all duration-200">
+                    <CardContent className="p-4 text-center">
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 rounded-full bg-social-blue/10 flex items-center justify-center mb-3">
+                          <Search className="h-6 w-6 text-social-blue" />
                         </div>
-                        <div>
-                          <h3 className="font-pixelated text-sm font-medium">Find Groups</h3>
-                          <p className="font-pixelated text-xs text-muted-foreground">
-                            Discover and join communities
-                          </p>
-                        </div>
+                        <h3 className="font-pixelated text-sm font-medium mb-1">Find Groups</h3>
+                        <p className="font-pixelated text-xs text-muted-foreground mb-3">
+                          Discover and join communities
+                        </p>
+                        <Button 
+                          onClick={() => {
+                            const tabsElement = document.querySelector('[data-state="inactive"][value="discover"]');
+                            if (tabsElement) {
+                              (tabsElement as HTMLElement).click();
+                            }
+                          }}
+                          variant="outline"
+                          className="font-pixelated text-xs w-full"
+                        >
+                          Browse Groups
+                        </Button>
                       </div>
-                      <Button 
-                        variant="outline"
-                        className="w-full font-pixelated text-xs"
-                        disabled
-                      >
-                        Browse Groups
-                      </Button>
                     </CardContent>
                   </Card>
                 </div>
@@ -1190,99 +1250,109 @@ export function Vortex() {
           </div>
         </div>
       </div>
-      
+
       {/* Create Group Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="font-pixelated">Create New Group</DialogTitle>
-            <DialogDescription className="font-pixelated text-xs">
-              Create a private group to chat with multiple people at once.
-            </DialogDescription>
           </DialogHeader>
-          
-          <div className="space-y-4 py-4">
+          <div className="space-y-4">
+            <p className="font-pixelated text-xs text-muted-foreground">
+              Create a private group to chat with multiple people at once.
+            </p>
+            
             <div className="space-y-2">
               <label className="font-pixelated text-xs">Group Name</label>
-              <div className="relative">
-                <Input
-                  placeholder="Enter group name"
-                  value={newGroupData.name}
-                  onChange={(e) => setNewGroupData({...newGroupData, name: e.target.value})}
-                  className={`font-pixelated text-xs ${groupNameExists ? 'border-red-500' : ''}`}
-                />
-                {checkingGroupName && (
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
-                )}
-                {groupNameExists && !checkingGroupName && (
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                    <AlertTriangle className="h-4 w-4 text-red-500" />
-                  </div>
-                )}
-                {!groupNameExists && newGroupData.name.trim() && !checkingGroupName && (
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
-                    <Check className="h-4 w-4 text-green-500" />
-                  </div>
-                )}
-              </div>
-              {groupNameExists && (
-                <p className="text-xs text-red-500 font-pixelated">
-                  This group name already exists. Please choose another name.
-                </p>
+              <Input
+                value={newGroupName}
+                onChange={(e) => {
+                  setNewGroupName(e.target.value);
+                  setNameError('');
+                }}
+                placeholder="Enter group name"
+                className="font-pixelated text-xs"
+              />
+              {nameError && (
+                <p className="text-destructive font-pixelated text-xs">{nameError}</p>
               )}
             </div>
             
             <div className="space-y-2">
               <label className="font-pixelated text-xs">Description</label>
               <Textarea
+                value={newGroupDescription}
+                onChange={(e) => setNewGroupDescription(e.target.value)}
                 placeholder="Enter group description"
-                value={newGroupData.description}
-                onChange={(e) => setNewGroupData({...newGroupData, description: e.target.value})}
-                className="font-pixelated text-xs"
+                className="font-pixelated text-xs resize-none min-h-[80px]"
               />
             </div>
             
-            <div className="bg-muted/30 p-3 rounded-lg">
-              <div className="flex items-start gap-2">
-                <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                <p className="font-pixelated text-xs text-muted-foreground">
-                  Private groups are only visible to members and require an invitation to join.
-                </p>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  id="private"
+                  checked={isPrivate}
+                  onChange={() => setIsPrivate(true)}
+                  className="h-4 w-4 text-social-purple"
+                />
+                <label htmlFor="private" className="font-pixelated text-xs flex items-center gap-1">
+                  <Lock className="h-3 w-3" /> Private
+                </label>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  id="public"
+                  checked={!isPrivate}
+                  onChange={() => setIsPrivate(false)}
+                  className="h-4 w-4 text-social-purple"
+                />
+                <label htmlFor="public" className="font-pixelated text-xs flex items-center gap-1">
+                  <Globe className="h-3 w-3" /> Public
+                </label>
               </div>
             </div>
+            
+            <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
+              <Info className="h-4 w-4 text-muted-foreground" />
+              <p className="font-pixelated text-xs text-muted-foreground">
+                {isPrivate 
+                  ? 'Private groups are only visible to members and require an invitation to join.'
+                  : 'Public groups can be discovered and joined by anyone.'}
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCreateDialog(false);
+                  setNewGroupName('');
+                  setNewGroupDescription('');
+                  setNameError('');
+                }}
+                className="font-pixelated text-xs"
+                disabled={creatingGroup}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateGroup}
+                className="bg-social-purple hover:bg-social-purple/90 text-white font-pixelated text-xs"
+                disabled={!newGroupName.trim() || creatingGroup}
+              >
+                {creatingGroup ? 'Creating...' : 'Create Group'}
+              </Button>
+            </div>
           </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowCreateDialog(false)}
-              className="font-pixelated text-xs"
-              disabled={creatingGroup}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreateGroup}
-              className="font-pixelated text-xs"
-              disabled={!newGroupData.name.trim() || creatingGroup || groupNameExists || checkingGroupName}
-            >
-              {creatingGroup ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                'Create Group'
-              )}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Group Confirmation Dialog */}
-      <AlertDialog open={showDeleteGroupDialog} onOpenChange={setShowDeleteGroupDialog}>
+      {/* Delete Group Confirmation */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="font-pixelated">Delete Group</AlertDialogTitle>
@@ -1296,14 +1366,14 @@ export function Vortex() {
               onClick={handleDeleteGroup}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
             >
-              Delete Group
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Leave Group Confirmation Dialog */}
-      <AlertDialog open={showLeaveGroupDialog} onOpenChange={setShowLeaveGroupDialog}>
+      {/* Leave Group Confirmation */}
+      <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="font-pixelated">Leave Group</AlertDialogTitle>
@@ -1317,11 +1387,129 @@ export function Vortex() {
               onClick={handleLeaveGroup}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
             >
-              Leave Group
+              Leave
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Join Request Dialog */}
+      <Dialog open={showJoinRequestDialog} onOpenChange={setShowJoinRequestDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-pixelated">Join Request</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="font-pixelated text-xs text-muted-foreground">
+              Send a request to join <span className="font-medium">{selectedGroup?.name}</span>. The group admin will need to approve your request.
+            </p>
+            
+            <div className="space-y-2">
+              <label className="font-pixelated text-xs">Message (Optional)</label>
+              <Textarea
+                value={joinRequestMessage}
+                onChange={(e) => setJoinRequestMessage(e.target.value)}
+                placeholder="Why do you want to join this group?"
+                className="font-pixelated text-xs resize-none min-h-[80px]"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowJoinRequestDialog(false);
+                  setJoinRequestMessage('');
+                }}
+                className="font-pixelated text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSendJoinRequest}
+                className="bg-social-purple hover:bg-social-purple/90 text-white font-pixelated text-xs"
+              >
+                Send Request
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Join Requests Dialog */}
+      <Dialog open={showJoinRequestDialog && isAdmin && joinRequests.length > 0} onOpenChange={setShowJoinRequestDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-pixelated">Join Requests</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="font-pixelated text-xs text-muted-foreground">
+              {joinRequests.length} {joinRequests.length === 1 ? 'person' : 'people'} requesting to join {selectedGroup?.name}
+            </p>
+            
+            <div className="max-h-[300px] overflow-y-auto space-y-3">
+              {joinRequests.map(request => (
+                <div key={request.id} className="border rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Avatar className="h-8 w-8">
+                      {request.profile?.avatar ? (
+                        <AvatarImage src={request.profile.avatar} />
+                      ) : (
+                        <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
+                          {request.profile?.name?.substring(0, 2).toUpperCase() || 'U'}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    <div>
+                      <p className="font-pixelated text-xs font-medium">
+                        {request.profile?.name || 'Unknown User'}
+                      </p>
+                      <p className="font-pixelated text-xs text-muted-foreground">
+                        @{request.profile?.username || 'unknown'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {request.message && (
+                    <div className="bg-muted/50 p-2 rounded-md mb-3">
+                      <p className="font-pixelated text-xs">
+                        {request.message}
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      onClick={() => handleJoinRequestResponse(request, false)}
+                      variant="outline"
+                      size="sm"
+                      className="font-pixelated text-xs h-7"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Reject
+                    </Button>
+                    <Button
+                      onClick={() => handleJoinRequestResponse(request, true)}
+                      size="sm"
+                      className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs h-7"
+                    >
+                      <Check className="h-3 w-3 mr-1" />
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <Button
+              onClick={() => setShowJoinRequestDialog(false)}
+              className="w-full font-pixelated text-xs"
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }
