@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAXDc6PR-m2MBa0oklp9ObJggDmnvvn4RQ",
@@ -12,7 +13,10 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
+
+// Initialize Firestore
+export const db = getFirestore(app);
 
 // Initialize Firebase Cloud Messaging and get a reference to the service
 let messaging: any = null;
@@ -33,7 +37,7 @@ const initializeMessaging = async () => {
 // Initialize messaging
 initializeMessaging();
 
-export { app, messaging };
+export { messaging };
 
 // Enhanced notification service for real push notifications
 export const NotificationService = {

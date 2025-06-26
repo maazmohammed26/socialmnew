@@ -40,27 +40,45 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  getDocs, 
+  doc, 
+  updateDoc, 
+  serverTimestamp, 
+  orderBy, 
+  onSnapshot,
+  getDoc,
+  setDoc,
+  arrayUnion,
+  arrayRemove
+} from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
+import { app } from '@/config/firebase';
 
 interface Group {
   id: string;
   name: string;
   description: string;
   avatar: string | null;
-  is_private: boolean;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  member_count: number;
-  max_members: number;
-  last_message?: string;
-  last_message_time?: string;
+  isPrivate: boolean;
+  createdBy: string;
+  createdAt: any;
+  updatedAt: any;
+  memberCount: number;
+  maxMembers: number;
+  lastMessage?: string;
+  lastMessageTime?: any;
 }
 
 interface GroupMember {
   id: string;
-  user_id: string;
+  userId: string;
   role: 'admin' | 'member';
-  joined_at: string;
+  joinedAt: any;
   name: string;
   username: string;
   avatar: string | null;
@@ -68,13 +86,13 @@ interface GroupMember {
 
 interface Message {
   id: string;
-  sender_id: string;
+  senderId: string;
   content: string;
-  message_type: string;
-  created_at: string;
-  sender_name: string;
-  sender_username: string;
-  sender_avatar: string | null;
+  messageType: string;
+  createdAt: any;
+  senderName: string;
+  senderUsername: string;
+  senderAvatar: string | null;
 }
 
 export function Vortex() {
@@ -89,13 +107,15 @@ export function Vortex() {
   const [newGroupData, setNewGroupData] = useState({
     name: '',
     description: '',
-    is_private: true,
     avatar: ''
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
   const { toast } = useToast();
+  const db = getFirestore(app);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Fetch current user
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
@@ -117,30 +137,110 @@ export function Vortex() {
     fetchCurrentUser();
   }, []);
 
+  // Fetch groups when user is loaded
   useEffect(() => {
     if (currentUser) {
       fetchGroups();
     }
   }, [currentUser]);
 
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  // Set up real-time listeners for selected group
+  useEffect(() => {
+    if (!selectedGroup || !currentUser) return;
+    
+    // Listen for new messages
+    const messagesQuery = query(
+      collection(db, 'groupMessages'),
+      where('groupId', '==', selectedGroup.id),
+      orderBy('createdAt', 'asc')
+    );
+    
+    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      const newMessages: Message[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        newMessages.push({
+          id: doc.id,
+          senderId: data.senderId,
+          content: data.content,
+          messageType: data.messageType || 'text',
+          createdAt: data.createdAt,
+          senderName: data.senderName,
+          senderUsername: data.senderUsername,
+          senderAvatar: data.senderAvatar
+        });
+      });
+      
+      setMessages(newMessages);
+    });
+    
+    // Fetch group members
+    fetchGroupMembers(selectedGroup.id);
+    
+    return () => {
+      unsubscribe();
+    };
+  }, [selectedGroup, currentUser]);
+
   const fetchGroups = async () => {
     try {
       setLoading(true);
       
-      // Try to fetch real groups from database
-      const { data, error } = await supabase
-        .from('groups')
-        .select('*')
-        .order('updated_at', { ascending: false });
+      // Query groups where the current user is a member
+      const memberOfQuery = query(
+        collection(db, 'groupMembers'),
+        where('userId', '==', currentUser.id)
+      );
       
-      if (error) {
-        console.error('Error fetching groups:', error);
+      const membershipSnapshot = await getDocs(memberOfQuery);
+      const groupIds = membershipSnapshot.docs.map(doc => doc.data().groupId);
+      
+      if (groupIds.length === 0) {
         setGroups([]);
-      } else {
-        setGroups(data || []);
+        setLoading(false);
+        return;
       }
       
-      setLoading(false);
+      // Get all groups the user is a member of
+      const groupsData: Group[] = [];
+      
+      for (const groupId of groupIds) {
+        const groupDoc = await getDoc(doc(db, 'groups', groupId));
+        
+        if (groupDoc.exists()) {
+          const data = groupDoc.data();
+          groupsData.push({
+            id: groupDoc.id,
+            name: data.name,
+            description: data.description || '',
+            avatar: data.avatar || null,
+            isPrivate: data.isPrivate,
+            createdBy: data.createdBy,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
+            memberCount: data.memberCount || 1,
+            maxMembers: data.maxMembers || 100,
+            lastMessage: data.lastMessage || '',
+            lastMessageTime: data.lastMessageTime
+          });
+        }
+      }
+      
+      // Sort by last activity
+      groupsData.sort((a, b) => {
+        const timeA = a.updatedAt ? a.updatedAt.toDate().getTime() : 0;
+        const timeB = b.updatedAt ? b.updatedAt.toDate().getTime() : 0;
+        return timeB - timeA;
+      });
+      
+      setGroups(groupsData);
     } catch (error) {
       console.error('Error fetching groups:', error);
       toast({
@@ -148,23 +248,50 @@ export function Vortex() {
         title: 'Error',
         description: 'Failed to load groups'
       });
-      setGroups([]);
+    } finally {
       setLoading(false);
     }
   };
 
   const fetchGroupMembers = async (groupId: string) => {
     try {
-      // Try to fetch real group members from database
-      const { data, error } = await supabase
-        .rpc('get_group_members_with_profiles', { group_uuid: groupId });
+      const membersQuery = query(
+        collection(db, 'groupMembers'),
+        where('groupId', '==', groupId)
+      );
       
-      if (error) {
-        console.error('Error fetching group members:', error);
-        setGroupMembers([]);
-      } else {
-        setGroupMembers(data || []);
+      const membersSnapshot = await getDocs(membersQuery);
+      const membersData: GroupMember[] = [];
+      
+      for (const memberDoc of membersSnapshot.docs) {
+        const data = memberDoc.data();
+        
+        // Get user profile data
+        const userDoc = await getDoc(doc(db, 'userProfiles', data.userId));
+        const userData = userDoc.exists() ? userDoc.data() : null;
+        
+        membersData.push({
+          id: memberDoc.id,
+          userId: data.userId,
+          role: data.role,
+          joinedAt: data.joinedAt,
+          name: userData?.name || 'Unknown User',
+          username: userData?.username || 'unknown',
+          avatar: userData?.avatar || null
+        });
       }
+      
+      // Sort members (admins first, then by join date)
+      membersData.sort((a, b) => {
+        if (a.role === 'admin' && b.role !== 'admin') return -1;
+        if (a.role !== 'admin' && b.role === 'admin') return 1;
+        
+        const timeA = a.joinedAt ? a.joinedAt.toDate().getTime() : 0;
+        const timeB = b.joinedAt ? b.joinedAt.toDate().getTime() : 0;
+        return timeA - timeB;
+      });
+      
+      setGroupMembers(membersData);
     } catch (error) {
       console.error('Error fetching group members:', error);
       toast({
@@ -172,94 +299,96 @@ export function Vortex() {
         title: 'Error',
         description: 'Failed to load group members'
       });
-      setGroupMembers([]);
-    }
-  };
-
-  const fetchGroupMessages = async (groupId: string) => {
-    try {
-      // Try to fetch real group messages from database
-      const { data, error } = await supabase
-        .rpc('get_group_messages_with_profiles', { 
-          group_uuid: groupId,
-          limit_count: 50,
-          offset_count: 0
-        });
-      
-      if (error) {
-        console.error('Error fetching group messages:', error);
-        setMessages([]);
-      } else {
-        setMessages(data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching group messages:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load messages'
-      });
-      setMessages([]);
     }
   };
 
   const handleSelectGroup = (group: Group) => {
     setSelectedGroup(group);
-    fetchGroupMembers(group.id);
-    fetchGroupMessages(group.id);
   };
 
   const handleCreateGroup = async () => {
+    if (!newGroupData.name.trim() || !currentUser) return;
+    
     try {
-      if (!newGroupData.name.trim()) {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Group name is required'
-        });
-        return;
-      }
-      
       setCreatingGroup(true);
       
-      // Create a real group using the RPC function
-      const { data, error } = await supabase
-        .rpc('create_group_with_admin', {
-          p_name: newGroupData.name.trim(),
-          p_description: newGroupData.description.trim(),
-          p_avatar: newGroupData.avatar,
-          p_is_private: true, // Always private
-          p_creator_id: currentUser.id
-        });
+      // Create a new group document
+      const groupRef = await addDoc(collection(db, 'groups'), {
+        name: newGroupData.name.trim(),
+        description: newGroupData.description.trim(),
+        avatar: newGroupData.avatar || null,
+        isPrivate: true, // Always private
+        createdBy: currentUser.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        memberCount: 1,
+        maxMembers: 100
+      });
       
-      if (error) {
-        console.error('Error creating group:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to create group. Please try again.'
-        });
-      } else {
-        toast({
-          title: 'Group created',
-          description: 'Your group has been created successfully!'
-        });
-        
-        fetchGroups();
-        setShowCreateDialog(false);
-        setNewGroupData({
-          name: '',
-          description: '',
-          is_private: true,
-          avatar: ''
+      // Add creator as admin member
+      await addDoc(collection(db, 'groupMembers'), {
+        groupId: groupRef.id,
+        userId: currentUser.id,
+        role: 'admin',
+        joinedAt: serverTimestamp()
+      });
+      
+      // Create user profile document if it doesn't exist
+      const userProfileRef = doc(db, 'userProfiles', currentUser.id);
+      const userProfileDoc = await getDoc(userProfileRef);
+      
+      if (!userProfileDoc.exists()) {
+        await setDoc(userProfileRef, {
+          name: currentUser.name || 'User',
+          username: currentUser.username || 'user',
+          avatar: currentUser.avatar || null,
+          createdAt: serverTimestamp()
         });
       }
+      
+      // Also store group ID in user's groups list
+      await updateDoc(userProfileRef, {
+        groups: arrayUnion(groupRef.id)
+      });
+      
+      toast({
+        title: 'Group created',
+        description: 'Your group has been created successfully!'
+      });
+      
+      // Refresh groups list
+      fetchGroups();
+      
+      // Reset form and close dialog
+      setNewGroupData({
+        name: '',
+        description: '',
+        avatar: ''
+      });
+      setShowCreateDialog(false);
+      
+      // Select the newly created group
+      const newGroup = {
+        id: groupRef.id,
+        name: newGroupData.name.trim(),
+        description: newGroupData.description.trim(),
+        avatar: newGroupData.avatar || null,
+        isPrivate: true,
+        createdBy: currentUser.id,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        memberCount: 1,
+        maxMembers: 100
+      };
+      
+      setSelectedGroup(newGroup);
+      
     } catch (error) {
       console.error('Error creating group:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to create group'
+        description: 'Failed to create group. Please try again.'
       });
     } finally {
       setCreatingGroup(false);
@@ -270,28 +399,42 @@ export function Vortex() {
     if (!newMessage.trim() || !selectedGroup || !currentUser) return;
     
     try {
-      // Try to send a real message
-      const { data, error } = await supabase
-        .from('group_messages')
-        .insert({
-          group_id: selectedGroup.id,
-          sender_id: currentUser.id,
-          content: newMessage.trim(),
-          message_type: 'text'
-        })
-        .select();
+      // Add message to Firestore
+      await addDoc(collection(db, 'groupMessages'), {
+        groupId: selectedGroup.id,
+        senderId: currentUser.id,
+        content: newMessage.trim(),
+        messageType: 'text',
+        createdAt: serverTimestamp(),
+        senderName: currentUser.name,
+        senderUsername: currentUser.username,
+        senderAvatar: currentUser.avatar
+      });
       
-      if (error) {
-        console.error('Error sending message:', error);
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to send message. Please try again.'
-        });
-      } else {
-        setNewMessage('');
-        fetchGroupMessages(selectedGroup.id);
-      }
+      // Update group's last message and time
+      await updateDoc(doc(db, 'groups', selectedGroup.id), {
+        lastMessage: newMessage.trim(),
+        lastMessageTime: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Clear input
+      setNewMessage('');
+      
+      // Store in local storage for offline access
+      const localMessages = JSON.parse(localStorage.getItem(`group_messages_${selectedGroup.id}`) || '[]');
+      localMessages.push({
+        id: Date.now().toString(),
+        senderId: currentUser.id,
+        content: newMessage.trim(),
+        messageType: 'text',
+        createdAt: new Date(),
+        senderName: currentUser.name,
+        senderUsername: currentUser.username,
+        senderAvatar: currentUser.avatar
+      });
+      localStorage.setItem(`group_messages_${selectedGroup.id}`, JSON.stringify(localMessages));
+      
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
@@ -299,16 +442,43 @@ export function Vortex() {
         title: 'Error',
         description: 'Failed to send message'
       });
+      
+      // Store in local storage for later sync
+      const pendingMessages = JSON.parse(localStorage.getItem('pending_group_messages') || '[]');
+      pendingMessages.push({
+        groupId: selectedGroup.id,
+        content: newMessage.trim(),
+        createdAt: new Date()
+      });
+      localStorage.setItem('pending_group_messages', JSON.stringify(pendingMessages));
+      
+      // Show in UI optimistically
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        senderId: currentUser.id,
+        content: newMessage.trim(),
+        messageType: 'text',
+        createdAt: new Date(),
+        senderName: currentUser.name,
+        senderUsername: currentUser.username,
+        senderAvatar: currentUser.avatar
+      }]);
+      
+      setNewMessage('');
     }
   };
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatMessageTime = (dateString: any) => {
+    if (!dateString) return '';
+    
+    const date = dateString.toDate ? dateString.toDate() : new Date(dateString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatDate = (dateString: any) => {
+    if (!dateString) return 'Today';
+    
+    const date = dateString.toDate ? dateString.toDate() : new Date(dateString);
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
@@ -322,52 +492,21 @@ export function Vortex() {
     }
   };
 
+  const getDateSeparatorText = (date: string) => {
+    if (date === 'Today') return 'Today';
+    if (date === 'Yesterday') return 'Yesterday';
+    return date;
+  };
+
+  const truncateMessage = (message: string, maxLength: number = 30) => {
+    if (message.length <= maxLength) return message;
+    return message.substring(0, maxLength) + '...';
+  };
+
   const filteredGroups = groups.filter(group => 
     group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     group.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  // Set up real-time subscriptions for groups and messages
-  useEffect(() => {
-    if (!currentUser) return;
-
-    // Subscribe to group changes
-    const groupsChannel = supabase
-      .channel('groups-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'groups' }, 
-        () => {
-          fetchGroups();
-        }
-      )
-      .subscribe();
-
-    // Subscribe to group messages if a group is selected
-    let messagesChannel: any;
-    if (selectedGroup) {
-      messagesChannel = supabase
-        .channel(`group-messages-${selectedGroup.id}`)
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'group_messages',
-            filter: `group_id=eq.${selectedGroup.id}`
-          }, 
-          () => {
-            fetchGroupMessages(selectedGroup.id);
-          }
-        )
-        .subscribe();
-    }
-
-    return () => {
-      supabase.removeChannel(groupsChannel);
-      if (messagesChannel) {
-        supabase.removeChannel(messagesChannel);
-      }
-    };
-  }, [currentUser, selectedGroup]);
 
   return (
     <DashboardLayout>
@@ -441,23 +580,23 @@ export function Vortex() {
                             <p className="font-medium truncate text-sm font-pixelated">
                               {group.name}
                             </p>
-                            {group.is_private && (
+                            {group.isPrivate && (
                               <Lock className="h-3 w-3 text-muted-foreground" />
                             )}
                           </div>
                           
                           <div className="flex items-center justify-between">
                             <p className="text-xs truncate font-pixelated text-muted-foreground">
-                              {group.last_message ? (
-                                group.last_message.substring(0, 20) + (group.last_message.length > 20 ? '...' : '')
+                              {group.lastMessage ? (
+                                truncateMessage(group.lastMessage)
                               ) : (
-                                `${group.member_count} members`
+                                `${group.memberCount} members`
                               )}
                             </p>
                             
-                            {group.last_message_time && (
+                            {group.lastMessageTime && (
                               <span className="text-xs text-muted-foreground font-pixelated">
-                                {formatTime(group.last_message_time)}
+                                {formatMessageTime(group.lastMessageTime)}
                               </span>
                             )}
                           </div>
@@ -510,7 +649,7 @@ export function Vortex() {
                       <p className="font-medium truncate text-sm font-pixelated">
                         {selectedGroup.name}
                       </p>
-                      {selectedGroup.is_private ? (
+                      {selectedGroup.isPrivate ? (
                         <Badge variant="outline" className="h-5 px-1 text-xs font-pixelated">
                           <Lock className="h-2 w-2 mr-1" />
                           Private
@@ -523,7 +662,7 @@ export function Vortex() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate font-pixelated">
-                      {selectedGroup.member_count} members
+                      {selectedGroup.memberCount} members
                     </p>
                   </div>
                   <DropdownMenu>
@@ -574,55 +713,58 @@ export function Vortex() {
                       <ScrollArea className="h-full scroll-smooth">
                         <div className="p-3 space-y-4">
                           {messages.length > 0 ? (
-                            messages.map((message, index) => {
-                              const isCurrentUser = message.sender_id === currentUser?.id;
-                              const showDate = index === 0 || 
-                                formatDate(messages[index-1].created_at) !== formatDate(message.created_at);
-                              
-                              return (
-                                <React.Fragment key={message.id}>
-                                  {showDate && (
-                                    <div className="flex justify-center my-2">
-                                      <Badge variant="outline" className="font-pixelated text-xs">
-                                        {formatDate(message.created_at)}
-                                      </Badge>
-                                    </div>
-                                  )}
-                                  <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`flex gap-2 max-w-[80%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                      <Avatar className="h-8 w-8 mt-1">
-                                        {message.sender_avatar ? (
-                                          <AvatarImage src={message.sender_avatar} />
-                                        ) : (
-                                          <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                                            {message.sender_name.substring(0, 2).toUpperCase()}
-                                          </AvatarFallback>
-                                        )}
-                                      </Avatar>
-                                      <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                          <p className="text-xs font-pixelated font-medium">
-                                            {isCurrentUser ? 'You' : message.sender_name}
-                                          </p>
-                                          <span className="text-xs text-muted-foreground font-pixelated">
-                                            {formatTime(message.created_at)}
-                                          </span>
-                                        </div>
-                                        <div className={`p-3 rounded-lg ${
-                                          isCurrentUser 
-                                            ? 'bg-social-green text-white' 
-                                            : 'bg-muted'
-                                        }`}>
-                                          <p className="text-sm font-pixelated whitespace-pre-wrap break-words">
-                                            {message.content}
-                                          </p>
+                            <>
+                              {messages.map((message, index) => {
+                                const isCurrentUser = message.senderId === currentUser?.id;
+                                const showDate = index === 0 || 
+                                  formatDate(messages[index-1].createdAt) !== formatDate(message.createdAt);
+                                
+                                return (
+                                  <React.Fragment key={message.id}>
+                                    {showDate && (
+                                      <div className="flex justify-center my-2">
+                                        <Badge variant="outline" className="font-pixelated text-xs">
+                                          {getDateSeparatorText(formatDate(message.createdAt))}
+                                        </Badge>
+                                      </div>
+                                    )}
+                                    <div className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
+                                      <div className={`flex gap-2 max-w-[80%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
+                                        <Avatar className="h-8 w-8 mt-1">
+                                          {message.senderAvatar ? (
+                                            <AvatarImage src={message.senderAvatar} />
+                                          ) : (
+                                            <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
+                                              {message.senderName.substring(0, 2).toUpperCase()}
+                                            </AvatarFallback>
+                                          )}
+                                        </Avatar>
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-xs font-pixelated font-medium">
+                                              {isCurrentUser ? 'You' : message.senderName}
+                                            </p>
+                                            <span className="text-xs text-muted-foreground font-pixelated">
+                                              {formatMessageTime(message.createdAt)}
+                                            </span>
+                                          </div>
+                                          <div className={`p-3 rounded-lg ${
+                                            isCurrentUser 
+                                              ? 'bg-social-green text-white' 
+                                              : 'bg-muted'
+                                          }`}>
+                                            <p className="text-sm font-pixelated whitespace-pre-wrap break-words">
+                                              {message.content}
+                                            </p>
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
-                                  </div>
-                                </React.Fragment>
-                              );
-                            })
+                                  </React.Fragment>
+                                );
+                              })}
+                              <div ref={messagesEndRef} />
+                            </>
                           ) : (
                             <div className="flex flex-col items-center justify-center h-full text-center">
                               <MessageSquare className="h-16 w-16 text-muted-foreground mb-4" />
@@ -690,7 +832,7 @@ export function Vortex() {
                               </Avatar>
                               <div>
                                 <p className="font-pixelated text-xs font-medium">
-                                  {member.name} {member.user_id === currentUser?.id && '(You)'}
+                                  {member.name} {member.userId === currentUser?.id && '(You)'}
                                 </p>
                                 <p className="font-pixelated text-xs text-muted-foreground">
                                   @{member.username}
