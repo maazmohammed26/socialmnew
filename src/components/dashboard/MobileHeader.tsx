@@ -316,7 +316,7 @@ export function MobileHeader() {
         </div>
         
         {/* Bottom Navigation - Icons Only */}
-        <nav className="grid grid-cols-6 border-t bg-background">
+        <nav className="fixed bottom-0 left-0 right-0 grid grid-cols-6 border-t bg-background">
           {tabs.map((tab) => (
             <div
               key={tab.path} 
