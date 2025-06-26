@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 @import './styles/win95.css';
+@import './styles/crimson.css';
 
 @tailwind base;
 @tailwind components;
@@ -123,6 +125,48 @@
     --radius: 0.5rem;
   }
 
+  /* Crimson Theme */
+  .crimson {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+    
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    
+    --primary: 0 70% 40%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 0 10% 96%;
+    --secondary-foreground: 0 70% 40%;
+    
+    --muted: 0 10% 96%;
+    --muted-foreground: 0 0% 50%;
+    
+    --accent: 0 10% 96%;
+    --accent-foreground: 0 70% 40%;
+    
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 0 10% 90%;
+    --input: 0 10% 90%;
+    --ring: 0 70% 40%;
+    
+    --radius: 0.75rem;
+    
+    /* Theme Colors */
+    --social-dark-green: 0 70% 30%;
+    --social-forest-green: 0 70% 40%;
+    --social-light-green: 0 70% 50%;
+    --social-magenta: 328 85% 45%;
+    --social-purple: 262 83% 58%;
+    --social-blue: 224 76% 48%;
+    --social-green: 0 70% 40%;
+  }
+
   /* Color Theme Classes */
   .theme-blue {
     --social-dark-green: var(--social-dark-blue);
@@ -189,8 +233,8 @@
     touch-action: manipulation;
   }
 
-  /* Default font for all themes except modern */
-  body:not(.modern) {
+  /* Default font for all themes except modern and crimson */
+  body:not(.modern):not(.crimson) {
     font-family: 'Press Start 2P', cursive;
   }
 
@@ -198,6 +242,12 @@
   .modern body,
   .modern * {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  }
+  
+  /* Crimson theme uses Poppins font */
+  .crimson body,
+  .crimson * {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   }
   
   /* Allow text selection for inputs and textareas */
@@ -220,6 +270,14 @@
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif !important;
     letter-spacing: normal !important;
   }
+  
+  /* Crimson theme overrides */
+  .crimson h1, .crimson h2, .crimson h3, .crimson h4, .crimson h5, .crimson h6, 
+  .crimson button, .crimson label, .crimson p, .crimson span, .crimson div,
+  .crimson input, .crimson textarea {
+    font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif !important;
+    letter-spacing: normal !important;
+  }
 }
 
 .font-pixelated {
@@ -232,6 +290,15 @@
 /* Modern font class for the new theme */
 .modern .font-pixelated {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif !important;
+  letter-spacing: normal !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  font-weight: 400;
+}
+
+/* Crimson font class for the new theme */
+.crimson .font-pixelated {
+  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif !important;
   letter-spacing: normal !important;
   font-size: 14px !important;
   line-height: 1.5 !important;
@@ -251,6 +318,19 @@
   font-weight: 700 !important;
 }
 
+/* Specific font weights for crimson theme */
+.crimson .font-medium {
+  font-weight: 500 !important;
+}
+
+.crimson .font-semibold {
+  font-weight: 600 !important;
+}
+
+.crimson .font-bold {
+  font-weight: 700 !important;
+}
+
 .social-gradient {
   @apply bg-gradient-to-r from-social-dark-green to-social-forest-green;
 }
@@ -261,6 +341,19 @@
 
 .card-gradient {
   @apply bg-gradient-to-b from-white to-gray-50 dark:from-gray-900 dark:to-gray-950;
+}
+
+/* Crimson theme gradients */
+.crimson .social-gradient {
+  @apply bg-gradient-to-r from-red-700 to-red-500;
+}
+
+.crimson .btn-gradient {
+  @apply bg-red-600 text-white hover:bg-red-500;
+}
+
+.crimson .card-gradient {
+  @apply bg-gradient-to-b from-white to-red-50;
 }
 
 .message-bubble-sent {
@@ -285,6 +378,25 @@
   font-weight: 400 !important;
 }
 
+/* Crimson theme message bubbles */
+.crimson .message-bubble-sent {
+  @apply bg-red-600 text-white;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  font-weight: 400 !important;
+  border-radius: 1rem !important;
+  border-top-right-radius: 0 !important;
+}
+
+.crimson .message-bubble-received {
+  @apply bg-gray-100;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  font-weight: 400 !important;
+  border-radius: 1rem !important;
+  border-top-left-radius: 0 !important;
+}
+
 /* Navigation tabs */
 .nav-tabs {
   @apply bg-transparent border-none;
@@ -299,6 +411,16 @@
 .modern .nav-tab {
   font-size: 14px !important;
   font-weight: 500 !important;
+}
+
+/* Crimson theme navigation */
+.crimson .nav-tab {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+.crimson .nav-tab[data-state=active] {
+  @apply border-red-600 text-red-600;
 }
 
 /* Mobile optimizations - Fixed layout */
@@ -325,6 +447,11 @@
     font-size: 14px;
   }
   
+  /* Crimson theme mobile adjustments */
+  .crimson body {
+    font-size: 14px;
+  }
+  
   .font-pixelated {
     font-size: 10px;
     line-height: 1.3;
@@ -332,6 +459,12 @@
 
   /* Modern theme mobile font adjustments */
   .modern .font-pixelated {
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+  }
+  
+  /* Crimson theme mobile font adjustments */
+  .crimson .font-pixelated {
     font-size: 13px !important;
     line-height: 1.4 !important;
   }
@@ -345,6 +478,13 @@
   /* Modern theme mobile message bubbles */
   .modern .message-bubble-sent,
   .modern .message-bubble-received {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+  }
+  
+  /* Crimson theme mobile message bubbles */
+  .crimson .message-bubble-sent,
+  .crimson .message-bubble-received {
     font-size: 13px !important;
     padding: 8px 12px !important;
   }
@@ -375,6 +515,16 @@
   .modern .text-base { font-size: 14px !important; line-height: 1.4 !important; }
   .modern .text-sm { font-size: 13px !important; line-height: 1.4 !important; }
   .modern .text-xs { font-size: 12px !important; line-height: 1.3 !important; }
+  
+  /* Crimson theme mobile text scaling */
+  .crimson .text-4xl { font-size: 24px !important; line-height: 1.2 !important; }
+  .crimson .text-3xl { font-size: 20px !important; line-height: 1.2 !important; }
+  .crimson .text-2xl { font-size: 18px !important; line-height: 1.3 !important; }
+  .crimson .text-xl { font-size: 16px !important; line-height: 1.3 !important; }
+  .crimson .text-lg { font-size: 15px !important; line-height: 1.4 !important; }
+  .crimson .text-base { font-size: 14px !important; line-height: 1.4 !important; }
+  .crimson .text-sm { font-size: 13px !important; line-height: 1.4 !important; }
+  .crimson .text-xs { font-size: 12px !important; line-height: 1.3 !important; }
   
   /* Compact spacing */
   .p-6 { padding: 0.75rem; }
@@ -415,6 +565,13 @@
     padding: 8px 12px !important;
   }
   
+  /* Crimson theme mobile inputs */
+  .crimson textarea,
+  .crimson input {
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+  }
+  
   /* Ensure proper spacing for mobile cards */
   .card {
     margin-bottom: 8px !important;
@@ -444,6 +601,21 @@
   100% { transform: translateY(0px); }
 }
 
+@keyframes slideInRight {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out forwards;
 }
@@ -454,6 +626,35 @@
 
 .animate-float {
   animation: float 3s ease-in-out infinite;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.3s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out forwards;
+}
+
+/* Crimson theme animations */
+.crimson .animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.crimson .animate-slide-in-right {
+  animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.crimson .animate-slide-in-left {
+  animation: slideInLeft 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.crimson .animate-scale-in {
+  animation: scaleIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Pixel art styling */
@@ -477,6 +678,18 @@
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
+/* Crimson theme styling */
+.crimson .pixel-border {
+  image-rendering: auto;
+  border-radius: 12px;
+  border-width: 1px;
+  border-color: rgba(220, 38, 38, 0.1);
+}
+
+.crimson .pixel-shadow {
+  box-shadow: 0 4px 12px -2px rgba(220, 38, 38, 0.15);
+}
+
 /* Development banner */
 .dev-banner {
   @apply bg-yellow-100 text-yellow-800 p-1 text-center font-pixelated;
@@ -484,6 +697,12 @@
 }
 
 .modern .dev-banner {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+
+.crimson .dev-banner {
+  @apply bg-red-50 text-red-800;
   font-size: 12px !important;
   font-weight: 500 !important;
 }
@@ -566,6 +785,15 @@ textarea, input {
   opacity: 1;
 }
 
+/* Crimson theme scrollbar */
+.crimson .scroll-container::-webkit-scrollbar-thumb {
+  background: hsl(0, 70%, 40%);
+}
+
+.crimson .scroll-container::-webkit-scrollbar-thumb:hover {
+  background: hsl(0, 70%, 50%);
+}
+
 /* Enhanced smooth scrolling for all scroll areas */
 .scroll-smooth {
   scroll-behavior: smooth;
@@ -579,6 +807,16 @@ textarea, input {
 
 .hover-scale:hover {
   transform: scale(1.05);
+}
+
+/* Crimson theme hover effects */
+.crimson .hover-scale {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .hover-scale:hover {
+  transform: scale(1.03);
+  box-shadow: 0 8px 20px -5px rgba(220, 38, 38, 0.2);
 }
 
 /* Enhanced mobile safe area support */
@@ -669,6 +907,13 @@ html, body, #root {
   animation: storyGradient 3s ease infinite;
 }
 
+/* Crimson theme story border */
+.crimson .story-unseen-border {
+  background: linear-gradient(-45deg, #dc2626, #b91c1c, #991b1b, #7f1d1d);
+  background-size: 400% 400%;
+  animation: storyGradient 3s ease infinite;
+}
+
 /* Improved button hover effects */
 .btn-hover-lift {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -677,6 +922,16 @@ html, body, #root {
 .btn-hover-lift:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Crimson theme button hover effects */
+.crimson .btn-hover-lift {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .btn-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.2);
 }
 
 /* Enhanced card hover effects */
@@ -689,9 +944,27 @@ html, body, #root {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
+/* Crimson theme card hover effects */
+.crimson .card-hover {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(220, 38, 38, 0.15);
+}
+
 /* Smooth transitions for all interactive elements */
 button, a, [role="button"], .cursor-pointer {
   transition: all 0.2s ease-in-out;
+}
+
+/* Crimson theme transitions */
+.crimson button, 
+.crimson a, 
+.crimson [role="button"], 
+.crimson .cursor-pointer {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Enhanced focus states for accessibility */
@@ -700,6 +973,15 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
   outline: 2px solid hsl(var(--social-green));
+  outline-offset: 2px;
+}
+
+/* Crimson theme focus states */
+.crimson button:focus-visible,
+.crimson a:focus-visible,
+.crimson input:focus-visible,
+.crimson textarea:focus-visible {
+  outline: 2px solid hsl(0, 70%, 40%);
   outline-offset: 2px;
 }
 
@@ -721,6 +1003,11 @@ textarea:focus-visible {
   animation: pulseBackground 2s infinite;
 }
 
+/* Crimson theme notification highlight */
+.crimson .notification-highlight::before {
+  background: linear-gradient(45deg, rgba(220, 38, 38, 0.1), rgba(185, 28, 28, 0.1));
+}
+
 @keyframes pulseBackground {
   0% { opacity: 0.5; }
   50% { opacity: 1; }
@@ -738,6 +1025,10 @@ textarea:focus-visible {
   position: relative;
 }
 
+.crimson .story-unviewed {
+  border-color: #dc2626;
+}
+
 .story-unviewed::after {
   content: '';
   position: absolute;
@@ -749,4 +1040,71 @@ textarea:focus-visible {
   border-radius: 50%;
   border: 2px solid white;
   animation: pulse 2s infinite;
+}
+
+.crimson .story-unviewed::after {
+  background-color: #dc2626;
+}
+
+/* Crimson theme specific styles */
+.crimson .card {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(220, 38, 38, 0.1);
+  overflow: hidden;
+}
+
+.crimson .button {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.crimson .input, 
+.crimson .textarea {
+  border-radius: 8px;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  transition: all 0.3s ease;
+}
+
+.crimson .input:focus, 
+.crimson .textarea:focus {
+  border-color: rgba(220, 38, 38, 0.5);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1);
+}
+
+/* Crimson theme avatar */
+.crimson .avatar {
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.crimson .avatar.rounded-full {
+  border-radius: 9999px !important;
+}
+
+/* Crimson theme badge */
+.crimson .badge {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Crimson theme toast */
+.crimson .toast {
+  border-radius: 12px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Crimson theme dialog */
+.crimson .dialog {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Crimson theme dropdown */
+.crimson .dropdown {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
 }

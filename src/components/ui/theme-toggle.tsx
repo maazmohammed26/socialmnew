@@ -1,5 +1,5 @@
 import React from 'react';
-import { Moon, Sun, Monitor, Palette, Sparkles } from 'lucide-react';
+import { Moon, Sun, Monitor, Palette, Sparkles, Flame } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -13,7 +13,7 @@ import {
 export function ThemeToggle() {
   const { theme, colorTheme, setTheme, setColorTheme, confirmThemeChange } = useTheme();
 
-  const handleThemeChange = async (newTheme: 'light' | 'dark' | 'win95' | 'modern') => {
+  const handleThemeChange = async (newTheme: 'light' | 'dark' | 'win95' | 'modern' | 'crimson') => {
     if (newTheme !== theme) {
       const confirmed = await confirmThemeChange(newTheme, 'theme');
       if (confirmed) {
@@ -73,6 +73,18 @@ export function ThemeToggle() {
             <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
           )}
           <span className="sr-only">Modern Mode</span>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => handleThemeChange('crimson')}
+          className={`h-8 w-8 ${theme === 'crimson' ? 'bg-background shadow-sm border-2 border-red-500' : ''} hover:bg-background/50 relative`}
+        >
+          <Flame className="h-4 w-4" />
+          {theme !== 'crimson' && (
+            <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+          )}
+          <span className="sr-only">Crimson Mode</span>
         </Button>
       </div>
 

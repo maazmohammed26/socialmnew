@@ -9,6 +9,7 @@ import { Send, Image as ImageIcon, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ThemePrompt } from '@/components/dashboard/ThemePrompt';
 
 export function Dashboard() {
   const [postContent, setPostContent] = useState('');
@@ -167,6 +168,9 @@ export function Dashboard() {
       <div className="max-w-2xl mx-auto relative h-[calc(100vh-60px)]">
         {/* Stories Container - Fixed at top */}
         <StoriesContainer />
+        
+        {/* Theme Prompt */}
+        <ThemePrompt />
         
         {/* Scrollable Content Area */}
         <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-180px)] px-2 scroll-smooth">

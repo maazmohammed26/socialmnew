@@ -7,7 +7,8 @@ import {
   Bell, 
   User,
   Menu,
-  LogOut
+  LogOut,
+  Zap
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -131,6 +132,12 @@ export function MobileHeader() {
     { path: '/dashboard', label: 'Home', icon: <Home className="h-5 w-5" /> },
     { path: '/friends', label: 'Friends', icon: <Users className="h-5 w-5" /> },
     { path: '/messages', label: 'Messages', icon: <MessageSquare className="h-5 w-5" /> },
+    { path: '/vortex', label: 'Vortex', icon: (
+      <div className="relative">
+        <Zap className="h-5 w-5" />
+        <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+      </div>
+    ) },
     { 
       path: '/notifications', 
       label: 'Notifications', 
@@ -218,6 +225,11 @@ export function MobileHeader() {
                         {tab.path === '/notifications' && unreadCount > 0 && (
                           <Badge variant="secondary" className="ml-auto h-4 px-2 text-xs">
                             {unreadCount}
+                          </Badge>
+                        )}
+                        {tab.path === '/vortex' && (
+                          <Badge variant="outline" className="ml-auto h-4 px-2 text-xs bg-red-50 text-red-600 border-red-200">
+                            New
                           </Badge>
                         )}
                       </div>
@@ -314,7 +326,7 @@ export function MobileHeader() {
         </div>
         
         {/* Bottom Navigation - Icons Only */}
-        <nav className="grid grid-cols-5 border-t bg-background">
+        <nav className="grid grid-cols-6 border-t bg-background">
           {tabs.map((tab) => (
             <div
               key={tab.path} 

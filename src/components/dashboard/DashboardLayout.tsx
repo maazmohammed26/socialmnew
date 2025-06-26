@@ -3,7 +3,7 @@ import { MobileHeader } from './MobileHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Bell, MessageSquare, User } from 'lucide-react';
+import { Home, Users, Bell, MessageSquare, User, Zap } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -89,6 +89,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     className={`nav-tab ${currentRoute === 'messages' ? 'active' : ''} font-pixelated p-2`}
                   >
                     <MessageSquare className="h-4 w-4" />
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="vortex" 
+                    onClick={() => handleTabClick('vortex')}
+                    className={`nav-tab ${currentRoute === 'vortex' ? 'active' : ''} font-pixelated p-2 relative`}
+                  >
+                    <Zap className="h-4 w-4" />
+                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
                   </TabsTrigger>
                   <TabsTrigger 
                     value="notifications" 

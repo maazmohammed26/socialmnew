@@ -18,6 +18,7 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Friends from "./pages/Friends";
 import Messages from "./pages/Messages";
+import Vortex from "./pages/Vortex";
 import Notifications from "./pages/Notifications";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
@@ -46,7 +47,7 @@ const App = () => {
   useEffect(() => {
     // Apply theme immediately on mount
     const root = window.document.documentElement;
-    root.classList.remove('light', 'dark', 'win95', 'modern');
+    root.classList.remove('light', 'dark', 'win95', 'modern', 'crimson');
     root.classList.add(theme);
 
     // Apply color theme
@@ -167,6 +168,14 @@ const App = () => {
                 element={
                   <AuthGuard>
                     <Messages />
+                  </AuthGuard>
+                } 
+              />
+              <Route 
+                path="/vortex" 
+                element={
+                  <AuthGuard>
+                    <Vortex />
                   </AuthGuard>
                 } 
               />

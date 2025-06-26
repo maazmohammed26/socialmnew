@@ -1,0 +1,184 @@
+/* Crimson Theme Styles */
+
+.crimson {
+  /* Base colors */
+  --crimson-50: 0 100% 97%;
+  --crimson-100: 0 100% 94%;
+  --crimson-200: 0 96% 89%;
+  --crimson-300: 0 94% 82%;
+  --crimson-400: 0 91% 71%;
+  --crimson-500: 0 84% 60%;
+  --crimson-600: 0 72% 51%;
+  --crimson-700: 0 74% 42%;
+  --crimson-800: 0 70% 35%;
+  --crimson-900: 0 63% 31%;
+  --crimson-950: 0 75% 15%;
+  
+  /* Accent colors */
+  --crimson-accent-1: 15 80% 50%;
+  --crimson-accent-2: 340 80% 50%;
+  
+  /* Shadows */
+  --crimson-shadow-sm: 0 1px 2px rgba(220, 38, 38, 0.05);
+  --crimson-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.1), 0 2px 4px -1px rgba(220, 38, 38, 0.06);
+  --crimson-shadow-md: 0 6px 10px -1px rgba(220, 38, 38, 0.1), 0 2px 4px -1px rgba(220, 38, 38, 0.06);
+  --crimson-shadow-lg: 0 10px 15px -3px rgba(220, 38, 38, 0.1), 0 4px 6px -2px rgba(220, 38, 38, 0.05);
+  --crimson-shadow-xl: 0 20px 25px -5px rgba(220, 38, 38, 0.1), 0 10px 10px -5px rgba(220, 38, 38, 0.04);
+}
+
+/* Crimson theme button styles */
+.crimson .btn-primary {
+  background-color: hsl(0, 72%, 51%);
+  color: white;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .btn-primary:hover {
+  background-color: hsl(0, 84%, 60%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.2);
+}
+
+.crimson .btn-secondary {
+  background-color: hsl(0, 100%, 97%);
+  color: hsl(0, 72%, 51%);
+  border: 1px solid hsl(0, 94%, 82%);
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .btn-secondary:hover {
+  background-color: hsl(0, 100%, 94%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
+}
+
+/* Crimson theme card styles */
+.crimson .card {
+  border-radius: 12px;
+  border: 1px solid hsl(0, 100%, 94%);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(220, 38, 38, 0.15);
+}
+
+/* Crimson theme input styles */
+.crimson .input,
+.crimson .textarea {
+  border-radius: 8px;
+  border: 1px solid hsl(0, 94%, 89%);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .input:focus,
+.crimson .textarea:focus {
+  border-color: hsl(0, 84%, 60%);
+  box-shadow: 0 0 0 2px hsla(0, 84%, 60%, 0.2);
+}
+
+/* Crimson theme avatar styles */
+.crimson .avatar {
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .avatar.rounded-full {
+  border-radius: 9999px !important;
+}
+
+.crimson .avatar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+}
+
+/* Crimson theme badge styles */
+.crimson .badge {
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Crimson theme toast styles */
+.crimson .toast {
+  border-radius: 12px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid hsl(0, 84%, 60%);
+}
+
+/* Crimson theme dialog styles */
+.crimson .dialog {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Crimson theme dropdown styles */
+.crimson .dropdown {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Crimson theme animations */
+@keyframes crimsonPulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes crimsonFadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes crimsonSlideIn {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.crimson .animate-crimson-pulse {
+  animation: crimsonPulse 2s infinite cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .animate-crimson-fade-in {
+  animation: crimsonFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.crimson .animate-crimson-slide-in {
+  animation: crimsonSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Crimson theme scrollbar */
+.crimson ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.crimson ::-webkit-scrollbar-track {
+  background: hsla(0, 0%, 0%, 0.05);
+  border-radius: 8px;
+}
+
+.crimson ::-webkit-scrollbar-thumb {
+  background: hsla(0, 84%, 60%, 0.5);
+  border-radius: 8px;
+}
+
+.crimson ::-webkit-scrollbar-thumb:hover {
+  background: hsla(0, 84%, 60%, 0.7);
+}
+
+/* Crimson theme focus ring */
+.crimson *:focus-visible {
+  outline: 2px solid hsla(0, 84%, 60%, 0.5);
+  outline-offset: 2px;
+}
