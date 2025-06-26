@@ -129,59 +129,25 @@ export function Vortex() {
     try {
       setLoading(true);
       
-      // This is a placeholder since we don't have the actual groups table yet
-      // In a real implementation, we would fetch from the groups table
-      
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Sample data
-      const sampleGroups: Group[] = [
-        {
-          id: '1',
-          name: 'Design Team',
-          description: 'Group for UI/UX designers to collaborate',
-          avatar: null,
-          is_private: true,
-          created_by: currentUser?.id || '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          member_count: 8,
-          max_members: 20,
-          last_message: 'Check out the new wireframes!',
-          last_message_time: new Date().toISOString()
-        },
-        {
-          id: '2',
-          name: 'Marketing Squad',
-          description: 'Discuss marketing strategies and campaigns',
-          avatar: null,
-          is_private: false,
-          created_by: 'other-user-id',
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-          updated_at: new Date(Date.now() - 3600000).toISOString(),
-          member_count: 12,
-          max_members: 30,
-          last_message: 'When is the next campaign launching?',
-          last_message_time: new Date(Date.now() - 3600000).toISOString()
-        },
-        {
-          id: '3',
-          name: 'Product Development',
-          description: 'Discuss product features and roadmap',
-          avatar: null,
-          is_private: true,
-          created_by: currentUser?.id || '',
-          created_at: new Date(Date.now() - 172800000).toISOString(),
-          updated_at: new Date(Date.now() - 7200000).toISOString(),
-          member_count: 15,
-          max_members: 25,
-          last_message: 'The new feature is ready for testing',
-          last_message_time: new Date(Date.now() - 7200000).toISOString()
+      // Try to fetch real groups from database if the table exists
+      try {
+        const { data, error } = await supabase
+          .from('groups')
+          .select('*')
+          .order('updated_at', { ascending: false });
+        
+        if (!error && data && data.length > 0) {
+          setGroups(data);
+          setLoading(false);
+          return;
         }
-      ];
+      } catch (err) {
+        console.log('Groups table may not exist yet:', err);
+      }
       
-      setGroups(sampleGroups);
+      // If no real data, don't show any groups
+      setGroups([]);
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching groups:', error);
       toast({
@@ -189,51 +155,28 @@ export function Vortex() {
         title: 'Error',
         description: 'Failed to load groups'
       });
-    } finally {
+      setGroups([]);
       setLoading(false);
     }
   };
 
   const fetchGroupMembers = async (groupId: string) => {
     try {
-      // This is a placeholder since we don't have the actual group_members table yet
-      // In a real implementation, we would fetch from the group_members table
-      
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Sample data
-      const sampleMembers: GroupMember[] = [
-        {
-          id: '1',
-          user_id: currentUser?.id || '',
-          role: 'admin',
-          joined_at: new Date(Date.now() - 86400000).toISOString(),
-          name: currentUser?.name || 'You',
-          username: currentUser?.username || 'you',
-          avatar: currentUser?.avatar || null
-        },
-        {
-          id: '2',
-          user_id: 'user-2',
-          role: 'member',
-          joined_at: new Date(Date.now() - 76400000).toISOString(),
-          name: 'John Doe',
-          username: 'johndoe',
-          avatar: null
-        },
-        {
-          id: '3',
-          user_id: 'user-3',
-          role: 'member',
-          joined_at: new Date(Date.now() - 66400000).toISOString(),
-          name: 'Jane Smith',
-          username: 'janesmith',
-          avatar: null
+      // Try to fetch real group members from database if the table exists
+      try {
+        const { data, error } = await supabase
+          .rpc('get_group_members_with_profiles', { group_uuid: groupId });
+        
+        if (!error && data && data.length > 0) {
+          setGroupMembers(data);
+          return;
         }
-      ];
+      } catch (err) {
+        console.log('Group members function may not exist yet:', err);
+      }
       
-      setGroupMembers(sampleMembers);
+      // If no real data, set empty array
+      setGroupMembers([]);
     } catch (error) {
       console.error('Error fetching group members:', error);
       toast({
@@ -241,52 +184,31 @@ export function Vortex() {
         title: 'Error',
         description: 'Failed to load group members'
       });
+      setGroupMembers([]);
     }
   };
 
   const fetchGroupMessages = async (groupId: string) => {
     try {
-      // This is a placeholder since we don't have the actual group_messages table yet
-      // In a real implementation, we would fetch from the group_messages table
-      
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 700));
-      
-      // Sample data
-      const sampleMessages: Message[] = [
-        {
-          id: '1',
-          sender_id: 'user-2',
-          content: 'Hey everyone! Welcome to the group chat.',
-          message_type: 'text',
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-          sender_name: 'John Doe',
-          sender_username: 'johndoe',
-          sender_avatar: null
-        },
-        {
-          id: '2',
-          sender_id: 'user-3',
-          content: 'Thanks for adding me! Excited to be here.',
-          message_type: 'text',
-          created_at: new Date(Date.now() - 76400000).toISOString(),
-          sender_name: 'Jane Smith',
-          sender_username: 'janesmith',
-          sender_avatar: null
-        },
-        {
-          id: '3',
-          sender_id: currentUser?.id || '',
-          content: 'Let\'s get started with our project discussion.',
-          message_type: 'text',
-          created_at: new Date(Date.now() - 66400000).toISOString(),
-          sender_name: currentUser?.name || 'You',
-          sender_username: currentUser?.username || 'you',
-          sender_avatar: currentUser?.avatar || null
+      // Try to fetch real group messages from database if the table exists
+      try {
+        const { data, error } = await supabase
+          .rpc('get_group_messages_with_profiles', { 
+            group_uuid: groupId,
+            limit_count: 50,
+            offset_count: 0
+          });
+        
+        if (!error && data) {
+          setMessages(data);
+          return;
         }
-      ];
+      } catch (err) {
+        console.log('Group messages function may not exist yet:', err);
+      }
       
-      setMessages(sampleMessages);
+      // If no real data, set empty array
+      setMessages([]);
     } catch (error) {
       console.error('Error fetching group messages:', error);
       toast({
@@ -294,6 +216,7 @@ export function Vortex() {
         title: 'Error',
         description: 'Failed to load messages'
       });
+      setMessages([]);
     }
   };
 
@@ -314,9 +237,38 @@ export function Vortex() {
         return;
       }
       
-      // This is a placeholder since we don't have the actual groups table yet
-      // In a real implementation, we would insert into the groups table
+      // Try to create a real group if the function exists
+      try {
+        const { data, error } = await supabase
+          .rpc('create_group_with_admin', {
+            p_name: newGroupData.name.trim(),
+            p_description: newGroupData.description.trim(),
+            p_avatar: newGroupData.avatar,
+            p_is_private: newGroupData.is_private,
+            p_creator_id: currentUser.id
+          });
+        
+        if (!error && data) {
+          toast({
+            title: 'Group created',
+            description: 'Your group has been created successfully!'
+          });
+          
+          fetchGroups();
+          setShowCreateDialog(false);
+          setNewGroupData({
+            name: '',
+            description: '',
+            is_private: true,
+            avatar: ''
+          });
+          return;
+        }
+      } catch (err) {
+        console.log('Group creation function may not exist yet:', err);
+      }
       
+      // If function doesn't exist, show coming soon message
       toast({
         title: 'Coming Soon',
         description: 'Group creation will be available in the next update!'
@@ -343,30 +295,34 @@ export function Vortex() {
     if (!newMessage.trim() || !selectedGroup || !currentUser) return;
     
     try {
-      // This is a placeholder since we don't have the actual group_messages table yet
-      // In a real implementation, we would insert into the group_messages table
-      
-      const newMsg: Message = {
-        id: Date.now().toString(),
-        sender_id: currentUser.id,
-        content: newMessage.trim(),
-        message_type: 'text',
-        created_at: new Date().toISOString(),
-        sender_name: currentUser.name,
-        sender_username: currentUser.username,
-        sender_avatar: currentUser.avatar
-      };
-      
-      setMessages(prev => [...prev, newMsg]);
-      setNewMessage('');
-      
-      // Scroll to bottom
-      setTimeout(() => {
-        const messagesContainer = document.getElementById('group-messages-container');
-        if (messagesContainer) {
-          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      // Try to send a real message if the table exists
+      try {
+        const { data, error } = await supabase
+          .from('group_messages')
+          .insert({
+            group_id: selectedGroup.id,
+            sender_id: currentUser.id,
+            content: newMessage.trim(),
+            message_type: 'text'
+          })
+          .select();
+        
+        if (!error && data) {
+          // Message sent successfully
+          setNewMessage('');
+          fetchGroupMessages(selectedGroup.id);
+          return;
         }
-      }, 100);
+      } catch (err) {
+        console.log('Group messages table may not exist yet:', err);
+      }
+      
+      // If table doesn't exist, show coming soon message
+      toast({
+        title: 'Coming Soon',
+        description: 'Messaging will be available in the next update!'
+      });
+      setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
