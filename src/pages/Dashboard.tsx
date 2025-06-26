@@ -9,7 +9,6 @@ import { Send, Image as ImageIcon, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ThemeHighlight } from '@/components/ui/theme-highlight';
 
 export function Dashboard() {
   const [postContent, setPostContent] = useState('');
@@ -17,19 +16,10 @@ export function Dashboard() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [feedKey, setFeedKey] = useState(0);
-  const [showThemeHighlight, setShowThemeHighlight] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const postBoxRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-
-  // Check if theme highlight should be shown
-  useEffect(() => {
-    const hasShown = localStorage.getItem('theme-highlight-shown');
-    if (hasShown) {
-      setShowThemeHighlight(false);
-    }
-  }, []);
 
   // Listen for scroll to top event with improved implementation
   useEffect(() => {
@@ -177,13 +167,6 @@ export function Dashboard() {
       <div className="max-w-2xl mx-auto relative h-[calc(100vh-60px)]">
         {/* Stories Container - Fixed at top */}
         <StoriesContainer />
-        
-        {/* Theme Highlight Banner */}
-        {showThemeHighlight && (
-          <div className="px-2 mt-2">
-            <ThemeHighlight onDismiss={() => setShowThemeHighlight(false)} />
-          </div>
-        )}
         
         {/* Scrollable Content Area */}
         <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-180px)] px-2 scroll-smooth">
