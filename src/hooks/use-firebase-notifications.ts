@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { NotificationService, requestNotificationPermission } from '@/config/firebase';
+import { NotificationService } from '@/config/firebase';
 import { useToast } from '@/hooks/use-toast';
 
 interface FirebaseNotificationState {
@@ -47,7 +47,7 @@ export function useFirebaseNotifications() {
         console.log('Firebase message received:', payload);
         
         // Show toast notification for admin broadcasts
-        if (payload.data?.type === 'admin_broadcast') {
+        if (payload?.data?.type === 'admin_broadcast') {
           toast({
             title: payload.notification?.title || 'Admin Notification',
             description: payload.notification?.body || payload.data?.message,
@@ -97,7 +97,7 @@ export function useFirebaseNotifications() {
   // Request notification permission
   const requestPermission = useCallback(async () => {
     try {
-      const result = await requestNotificationPermission();
+      const result = await NotificationService.requestPermission();
       
       if (result) {
         setState(prev => ({

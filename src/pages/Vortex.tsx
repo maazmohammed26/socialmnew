@@ -56,8 +56,7 @@ import {
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore';
-import { getFirestore } from 'firebase/firestore';
-import { app } from '@/config/firebase';
+import { db } from '@/config/firebase';
 
 interface Group {
   id: string;
@@ -112,7 +111,6 @@ export function Vortex() {
   const [searchQuery, setSearchQuery] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
   const { toast } = useToast();
-  const db = getFirestore(app);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch current user
@@ -267,17 +265,20 @@ export function Vortex() {
         const data = memberDoc.data();
         
         // Get user profile data
-        const userDoc = await getDoc(doc(db, 'userProfiles', data.userId));
-        const userData = userDoc.exists() ? userDoc.data() : null;
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('name, username, avatar')
+          .eq('id', data.userId)
+          .single();
         
         membersData.push({
           id: memberDoc.id,
           userId: data.userId,
           role: data.role,
           joinedAt: data.joinedAt,
-          name: userData?.name || 'Unknown User',
-          username: userData?.username || 'unknown',
-          avatar: userData?.avatar || null
+          name: userProfile?.name || 'Unknown User',
+          username: userProfile?.username || 'unknown',
+          avatar: userProfile?.avatar || null
         });
       }
       

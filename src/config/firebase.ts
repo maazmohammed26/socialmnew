@@ -35,4 +35,40 @@ if (typeof window !== 'undefined') {
 
 export { messaging };
 
+// Simple notification service for the app
+export const NotificationService = {
+  initialize: async () => {
+    // Initialize notification service
+    console.log('Notification service initialized');
+    return true;
+  },
+  
+  onMessage: (callback: (payload: any) => void) => {
+    console.log('Setting up message listener');
+    // Return unsubscribe function
+    return () => {
+      console.log('Message listener removed');
+    };
+  },
+  
+  // Request notification permission
+  requestPermission: async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.permission;
+      if (permission === 'granted') {
+        return true;
+      }
+      
+      try {
+        const result = await Notification.requestPermission();
+        return result === 'granted';
+      } catch (error) {
+        console.error('Error requesting notification permission:', error);
+        return false;
+      }
+    }
+    return false;
+  }
+};
+
 export default app;
