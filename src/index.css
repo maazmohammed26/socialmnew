@@ -611,6 +611,18 @@
     left: 0 !important;
     right: 0 !important;
     z-index: 50 !important;
+    height: auto !important;
+    padding: 0.5rem 1rem !important;
+  }
+  
+  .dev-banner {
+    position: relative;
+    z-index: 51;
+  }
+  
+  /* Adjust main content to account for header */
+  main {
+    padding-top: 4rem !important;
   }
 }
 
