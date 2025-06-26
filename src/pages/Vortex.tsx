@@ -14,14 +14,12 @@ import {
   Zap, 
   Users, 
   Plus, 
-  Search, 
   MessageSquare, 
   Settings, 
   UserPlus, 
   Clock, 
   Info, 
   Send, 
-  Image as ImageIcon,
   X,
   Lock,
   Globe,
@@ -422,12 +420,11 @@ export function Vortex() {
               </div>
               
               <div className="relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search groups..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 h-8 font-pixelated text-xs"
+                  className="pl-3 h-8 font-pixelated text-xs"
                 />
               </div>
             </div>
@@ -773,7 +770,7 @@ export function Vortex() {
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3 mb-3">
                         <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <Search className="h-5 w-5 text-blue-500" />
+                          <Users className="h-5 w-5 text-blue-500" />
                         </div>
                         <div>
                           <h3 className="font-pixelated text-sm font-medium">Find Groups</h3>
