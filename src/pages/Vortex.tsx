@@ -6,758 +6,654 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
-import { formatDistanceToNow } from 'date-fns';
 import { 
-  Zap, 
-  Search, 
-  Plus, 
   Users, 
   Send, 
-  Info, 
-  Settings, 
-  Trash2, 
-  LogOut, 
+  Plus, 
   UserPlus, 
-  Check, 
+  Settings, 
+  MoreVertical, 
+  UserCheck, 
   X, 
+  Info,
   MessageSquare,
-  Lock,
-  Globe,
-  ChevronRight
+  Zap
 } from 'lucide-react';
-import { db, auth } from '@/config/firebase';
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
-  serverTimestamp, 
-  setDoc 
-} from 'firebase/firestore';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { formatDistanceToNow } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Group {
   id: string;
   name: string;
   description: string;
-  avatar?: string;
-  isPrivate: boolean;
-  createdBy: string;
-  createdAt: any;
-  memberCount: number;
+  avatar: string | null;
+  is_private: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  member_count: number;
+  max_members: number;
 }
 
 interface GroupMember {
   id: string;
-  groupId: string;
-  userId: string;
+  user_id: string;
   role: 'admin' | 'member';
-  joinedAt: any;
-  profile?: {
-    name: string;
-    username: string;
-    avatar: string | null;
-  };
+  joined_at: string;
+  name: string;
+  username: string;
+  avatar: string | null;
 }
 
 interface GroupMessage {
   id: string;
-  groupId: string;
-  senderId: string;
+  sender_id: string;
   content: string;
-  messageType: 'text' | 'image' | 'file';
-  createdAt: any;
-  senderName?: string;
-  senderAvatar?: string;
+  message_type: string;
+  created_at: string;
+  sender_name: string;
+  sender_username: string;
+  sender_avatar: string | null;
 }
 
 interface JoinRequest {
   id: string;
-  groupId: string;
-  userId: string;
-  status: 'pending' | 'approved' | 'rejected';
-  message?: string;
-  createdAt: any;
-  profile?: {
-    name: string;
-    username: string;
-    avatar: string | null;
-  };
+  user_id: string;
+  status: string;
+  message: string | null;
+  created_at: string;
+  name: string;
+  username: string;
+  avatar: string | null;
 }
 
 export function Vortex() {
   const [groups, setGroups] = useState<Group[]>([]);
-  const [myGroups, setMyGroups] = useState<Group[]>([]);
-  const [suggestedGroups, setSuggestedGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
-  const [messages, setMessages] = useState<GroupMessage[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupDescription, setNewGroupDescription] = useState('');
-  const [isPrivate, setIsPrivate] = useState(true);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
-  const [showJoinRequestDialog, setShowJoinRequestDialog] = useState(false);
-  const [joinRequestMessage, setJoinRequestMessage] = useState('');
+  const [groupMessages, setGroupMessages] = useState<GroupMessage[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [nameError, setNameError] = useState('');
-  const [creatingGroup, setCreatingGroup] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [showCreateGroupDialog, setShowCreateGroupDialog] = useState(false);
+  const [showJoinGroupDialog, setShowJoinGroupDialog] = useState(false);
+  const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false);
+  const [showMembersDialog, setShowMembersDialog] = useState(false);
+  const [showJoinRequestsDialog, setShowJoinRequestsDialog] = useState(false);
+  const [showLeaveGroupConfirm, setShowLeaveGroupConfirm] = useState(false);
+  const [newGroup, setNewGroup] = useState({
+    name: '',
+    description: '',
+    avatar: '',
+    is_private: true
+  });
+  const [groupSuggestions, setGroupSuggestions] = useState<any[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<any>(null);
+  const [joinMessage, setJoinMessage] = useState('');
+  const [processingAction, setProcessingAction] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Scroll to bottom of messages
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // Get current user
   useEffect(() => {
-    const getCurrentUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
-          
-          setCurrentUser({ ...user, profile });
-        }
-      } catch (error) {
-        console.error('Error getting current user:', error);
-      }
-    };
-
-    getCurrentUser();
+    fetchCurrentUser();
   }, []);
 
-  // Load user's groups
   useEffect(() => {
-    if (!currentUser) return;
-
-    const loadGroups = async () => {
-      setLoading(true);
-      try {
-        // Get groups where user is a member
-        const q = query(
-          collection(db, 'groupMembers'),
-          where('userId', '==', currentUser.id)
-        );
-        
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
-          const membershipDocs = snapshot.docs;
-          const groupIds = membershipDocs.map(doc => doc.data().groupId);
-          
-          if (groupIds.length === 0) {
-            setMyGroups([]);
-            setLoading(false);
-            return;
-          }
-          
-          const myGroupsData: Group[] = [];
-          
-          // Get group details for each group
-          for (const groupId of groupIds) {
-            const groupDoc = await getDoc(doc(db, 'groups', groupId));
-            if (groupDoc.exists()) {
-              const groupData = groupDoc.data();
-              myGroupsData.push({
-                id: groupDoc.id,
-                name: groupData.name,
-                description: groupData.description,
-                avatar: groupData.avatar,
-                isPrivate: groupData.isPrivate,
-                createdBy: groupData.createdBy,
-                createdAt: groupData.createdAt,
-                memberCount: groupData.memberCount || 1
-              });
-            }
-          }
-          
-          setMyGroups(myGroupsData);
-          setLoading(false);
-        });
-        
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Error loading groups:', error);
-        setLoading(false);
-      }
-    };
-    
-    loadGroups();
+    if (currentUser) {
+      fetchUserGroups();
+      fetchGroupSuggestions();
+    }
   }, [currentUser]);
 
-  // Load suggested groups
   useEffect(() => {
-    if (!currentUser) return;
-
-    const loadSuggestedGroups = async () => {
-      try {
-        // Get all public groups
-        const q = query(
-          collection(db, 'groups'),
-          where('isPrivate', '==', false)
-        );
-        
-        const querySnapshot = await getDocs(q);
-        const allGroups: Group[] = [];
-        
-        querySnapshot.forEach((doc) => {
-          const groupData = doc.data();
-          allGroups.push({
-            id: doc.id,
-            name: groupData.name,
-            description: groupData.description,
-            avatar: groupData.avatar,
-            isPrivate: groupData.isPrivate,
-            createdBy: groupData.createdBy,
-            createdAt: groupData.createdAt,
-            memberCount: groupData.memberCount || 1
-          });
-        });
-        
-        // Filter out groups the user is already a member of
-        const myGroupIds = myGroups.map(g => g.id);
-        const filteredGroups = allGroups.filter(g => !myGroupIds.includes(g.id));
-        
-        setSuggestedGroups(filteredGroups);
-      } catch (error) {
-        console.error('Error loading suggested groups:', error);
-      }
-    };
-    
-    if (myGroups.length > 0) {
-      loadSuggestedGroups();
-    }
-  }, [currentUser, myGroups]);
-
-  // Load group members when a group is selected
-  useEffect(() => {
-    if (!selectedGroup) return;
-
-    const loadGroupMembers = async () => {
-      try {
-        const q = query(
-          collection(db, 'groupMembers'),
-          where('groupId', '==', selectedGroup.id)
-        );
-        
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
-          const memberDocs = snapshot.docs;
-          const membersData: GroupMember[] = [];
-          
-          for (const memberDoc of memberDocs) {
-            const memberData = memberDoc.data();
+    if (selectedGroup) {
+      fetchGroupMembers();
+      fetchGroupMessages();
+      fetchJoinRequests();
+      
+      // Set up real-time subscription for messages
+      const messagesChannel = supabase
+        .channel(`group-messages-${selectedGroup.id}`)
+        .on('postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'group_messages',
+            filter: `group_id=eq.${selectedGroup.id}`
+          }, 
+          async (payload) => {
+            console.log('New group message:', payload);
             
-            // Get user profile from Supabase
-            const { data: profile } = await supabase
+            // Fetch the sender's profile information
+            const { data: senderProfile } = await supabase
               .from('profiles')
               .select('name, username, avatar')
-              .eq('id', memberData.userId)
+              .eq('id', payload.new.sender_id)
               .single();
             
-            membersData.push({
-              id: memberDoc.id,
-              groupId: memberData.groupId,
-              userId: memberData.userId,
-              role: memberData.role,
-              joinedAt: memberData.joinedAt,
-              profile: profile || undefined
-            });
-            
-            // Check if current user is admin
-            if (memberData.userId === currentUser?.id && memberData.role === 'admin') {
-              setIsAdmin(true);
+            if (senderProfile) {
+              const newMessage: GroupMessage = {
+                ...payload.new,
+                sender_name: senderProfile.name,
+                sender_username: senderProfile.username,
+                sender_avatar: senderProfile.avatar
+              };
+              
+              // Add the new message to state
+              setGroupMessages(prev => [...prev, newMessage]);
+              
+              // Scroll to bottom
+              setTimeout(() => {
+                scrollToBottom();
+              }, 100);
             }
           }
-          
-          setGroupMembers(membersData);
-        });
-        
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Error loading group members:', error);
-      }
-    };
-    
-    loadGroupMembers();
-    
-    // Reset admin status when changing groups
-    setIsAdmin(false);
-  }, [selectedGroup, currentUser?.id]);
-
-  // Load messages when a group is selected
-  useEffect(() => {
-    if (!selectedGroup) return;
-
-    const loadMessages = async () => {
-      try {
-        const q = query(
-          collection(db, 'groupMessages'),
-          where('groupId', '==', selectedGroup.id),
-          orderBy('createdAt', 'asc')
-        );
-        
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
-          const messageDocs = snapshot.docs;
-          const messagesData: GroupMessage[] = [];
-          
-          for (const messageDoc of messageDocs) {
-            const messageData = messageDoc.data();
-            
-            // Get sender profile from Supabase
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('name, avatar')
-              .eq('id', messageData.senderId)
-              .single();
-            
-            messagesData.push({
-              id: messageDoc.id,
-              groupId: messageData.groupId,
-              senderId: messageData.senderId,
-              content: messageData.content,
-              messageType: messageData.messageType || 'text',
-              createdAt: messageData.createdAt,
-              senderName: profile?.name || 'Unknown User',
-              senderAvatar: profile?.avatar || undefined
-            });
+        )
+        .subscribe();
+      
+      // Set up real-time subscription for members
+      const membersChannel = supabase
+        .channel(`group-members-${selectedGroup.id}`)
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'group_members',
+            filter: `group_id=eq.${selectedGroup.id}`
+          }, 
+          () => {
+            fetchGroupMembers();
           }
-          
-          setMessages(messagesData);
-          
-          // Scroll to bottom after messages load
-          setTimeout(scrollToBottom, 100);
-        });
-        
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Error loading messages:', error);
-      }
-    };
-    
-    loadMessages();
+        )
+        .subscribe();
+      
+      // Set up real-time subscription for join requests
+      const requestsChannel = supabase
+        .channel(`group-requests-${selectedGroup.id}`)
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'group_join_requests',
+            filter: `group_id=eq.${selectedGroup.id}`
+          }, 
+          () => {
+            fetchJoinRequests();
+          }
+        )
+        .subscribe();
+      
+      return () => {
+        supabase.removeChannel(messagesChannel);
+        supabase.removeChannel(membersChannel);
+        supabase.removeChannel(requestsChannel);
+      };
+    }
   }, [selectedGroup]);
 
-  // Load join requests for admin
   useEffect(() => {
-    if (!selectedGroup || !isAdmin) return;
+    scrollToBottom();
+  }, [groupMessages]);
 
-    const loadJoinRequests = async () => {
-      try {
-        const q = query(
-          collection(db, 'groupJoinRequests'),
-          where('groupId', '==', selectedGroup.id),
-          where('status', '==', 'pending')
-        );
-        
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
-          const requestDocs = snapshot.docs;
-          const requestsData: JoinRequest[] = [];
-          
-          for (const requestDoc of requestDocs) {
-            const requestData = requestDoc.data();
-            
-            // Get user profile from Supabase
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('name, username, avatar')
-              .eq('id', requestData.userId)
-              .single();
-            
-            requestsData.push({
-              id: requestDoc.id,
-              groupId: requestData.groupId,
-              userId: requestData.userId,
-              status: requestData.status,
-              message: requestData.message,
-              createdAt: requestData.createdAt,
-              profile: profile || undefined
-            });
-          }
-          
-          setJoinRequests(requestsData);
-        });
-        
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Error loading join requests:', error);
-      }
-    };
-    
-    loadJoinRequests();
-  }, [selectedGroup, isAdmin]);
-
-  // Check if group name is unique
-  const checkGroupNameUnique = async (name: string) => {
+  const fetchCurrentUser = async () => {
     try {
-      const q = query(
-        collection(db, 'groups'),
-        where('name', '==', name)
-      );
-      
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.empty;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        setCurrentUser({ ...user, ...profile });
+      }
     } catch (error) {
-      console.error('Error checking group name:', error);
-      return false;
+      console.error('Error fetching current user:', error);
     }
   };
 
-  // Create a new group
-  const handleCreateGroup = async () => {
-    if (!newGroupName.trim()) {
-      setNameError('Group name is required');
-      return;
-    }
-    
-    if (newGroupName.length < 3) {
-      setNameError('Group name must be at least 3 characters');
-      return;
-    }
-    
-    setCreatingGroup(true);
-    
+  const fetchUserGroups = async () => {
     try {
-      // Check if group name is unique
-      const isUnique = await checkGroupNameUnique(newGroupName.trim());
+      setLoading(true);
       
-      if (!isUnique) {
-        setNameError('Group name already exists');
-        setCreatingGroup(false);
-        return;
+      // Get groups where user is a member
+      const { data: memberGroups, error: memberError } = await supabase
+        .from('group_members')
+        .select(`
+          group_id,
+          groups:group_id (
+            id,
+            name,
+            description,
+            avatar,
+            is_private,
+            created_by,
+            created_at,
+            updated_at,
+            member_count,
+            max_members
+          )
+        `)
+        .eq('user_id', currentUser.id);
+      
+      if (memberError) throw memberError;
+      
+      const formattedGroups = memberGroups.map(item => item.groups);
+      
+      // Sort groups by updated_at (most recent first)
+      formattedGroups.sort((a, b) => 
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      );
+      
+      setGroups(formattedGroups);
+      
+      // If there are groups, select the first one
+      if (formattedGroups.length > 0 && !selectedGroup) {
+        setSelectedGroup(formattedGroups[0]);
       }
-      
-      // Create group in Firestore
-      const groupRef = await addDoc(collection(db, 'groups'), {
-        name: newGroupName.trim(),
-        description: newGroupDescription.trim(),
-        isPrivate: isPrivate,
-        createdBy: currentUser.id,
-        createdAt: serverTimestamp(),
-        memberCount: 1
-      });
-      
-      // Add creator as admin member
-      await setDoc(doc(db, 'groupMembers', `${currentUser.id}_${groupRef.id}`), {
-        groupId: groupRef.id,
-        userId: currentUser.id,
-        role: 'admin',
-        joinedAt: serverTimestamp()
-      });
-      
-      // Reset form
-      setNewGroupName('');
-      setNewGroupDescription('');
-      setIsPrivate(true);
-      setShowCreateDialog(false);
-      
-      toast({
-        title: 'Group created',
-        description: 'Your group has been created successfully',
-      });
-      
-      // Select the new group
-      const newGroup = {
-        id: groupRef.id,
-        name: newGroupName.trim(),
-        description: newGroupDescription.trim(),
-        isPrivate: isPrivate,
-        createdBy: currentUser.id,
-        createdAt: new Date(),
-        memberCount: 1
-      };
-      
-      setSelectedGroup(newGroup);
-      setMyGroups(prev => [...prev, newGroup]);
     } catch (error) {
-      console.error('Error creating group:', error);
+      console.error('Error fetching user groups:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to create group. Please try again.',
+        description: 'Failed to load your groups'
       });
     } finally {
-      setCreatingGroup(false);
+      setLoading(false);
     }
   };
 
-  // Send a message
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedGroup || sendingMessage) return;
-    
-    setSendingMessage(true);
+  const fetchGroupSuggestions = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_group_suggestions', {
+        user_uuid: currentUser.id,
+        limit_count: 5
+      });
+      
+      if (error) throw error;
+      
+      setGroupSuggestions(data || []);
+    } catch (error) {
+      console.error('Error fetching group suggestions:', error);
+    }
+  };
+
+  const fetchGroupMembers = async () => {
+    if (!selectedGroup) return;
     
     try {
-      await addDoc(collection(db, 'groupMessages'), {
-        groupId: selectedGroup.id,
-        senderId: currentUser.id,
-        content: newMessage.trim(),
-        messageType: 'text',
-        createdAt: serverTimestamp()
+      const { data, error } = await supabase.rpc('get_group_members_with_profiles', {
+        group_uuid: selectedGroup.id
       });
+      
+      if (error) throw error;
+      
+      setGroupMembers(data || []);
+    } catch (error) {
+      console.error('Error fetching group members:', error);
+    }
+  };
+
+  const fetchGroupMessages = async () => {
+    if (!selectedGroup) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('get_group_messages_with_profiles', {
+        group_uuid: selectedGroup.id,
+        limit_count: 100,
+        offset_count: 0
+      });
+      
+      if (error) throw error;
+      
+      setGroupMessages(data || []);
+      
+      // Scroll to bottom after messages load
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+    } catch (error) {
+      console.error('Error fetching group messages:', error);
+    }
+  };
+
+  const fetchJoinRequests = async () => {
+    if (!selectedGroup) return;
+    
+    // Check if user is an admin
+    const isAdmin = groupMembers.some(
+      member => member.user_id === currentUser.id && member.role === 'admin'
+    );
+    
+    if (!isAdmin) return;
+    
+    try {
+      const { data, error } = await supabase.rpc('get_group_join_requests_with_profiles', {
+        group_uuid: selectedGroup.id
+      });
+      
+      if (error) throw error;
+      
+      setJoinRequests(data || []);
+    } catch (error) {
+      console.error('Error fetching join requests:', error);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !selectedGroup || !currentUser || sendingMessage) return;
+    
+    try {
+      setSendingMessage(true);
+      
+      const { data, error } = await supabase
+        .from('group_messages')
+        .insert({
+          group_id: selectedGroup.id,
+          sender_id: currentUser.id,
+          content: newMessage.trim(),
+          message_type: 'text'
+        })
+        .select();
+      
+      if (error) throw error;
       
       setNewMessage('');
       
-      // No need to manually update messages as the onSnapshot listener will handle it
+      // No need to update messages state as the real-time subscription will handle it
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to send message. Please try again.',
+        description: 'Failed to send message'
       });
     } finally {
       setSendingMessage(false);
     }
   };
 
-  // Delete a group
-  const handleDeleteGroup = async () => {
-    if (!selectedGroup || !isAdmin) return;
+  const createGroup = async () => {
+    if (!newGroup.name.trim() || processingAction) return;
     
     try {
-      // Delete group messages
-      const messagesQuery = query(
-        collection(db, 'groupMessages'),
-        where('groupId', '==', selectedGroup.id)
-      );
+      setProcessingAction(true);
       
-      const messagesSnapshot = await getDocs(messagesQuery);
-      const deleteMessagePromises = messagesSnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deleteMessagePromises);
+      const { data, error } = await supabase.rpc('create_group_with_admin', {
+        p_name: newGroup.name.trim(),
+        p_description: newGroup.description.trim(),
+        p_avatar: newGroup.avatar.trim() || null,
+        p_is_private: newGroup.is_private,
+        p_creator_id: currentUser.id
+      });
       
-      // Delete group members
-      const membersQuery = query(
-        collection(db, 'groupMembers'),
-        where('groupId', '==', selectedGroup.id)
-      );
-      
-      const membersSnapshot = await getDocs(membersQuery);
-      const deleteMemberPromises = membersSnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deleteMemberPromises);
-      
-      // Delete join requests
-      const requestsQuery = query(
-        collection(db, 'groupJoinRequests'),
-        where('groupId', '==', selectedGroup.id)
-      );
-      
-      const requestsSnapshot = await getDocs(requestsQuery);
-      const deleteRequestPromises = requestsSnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deleteRequestPromises);
-      
-      // Delete group
-      await deleteDoc(doc(db, 'groups', selectedGroup.id));
+      if (error) throw error;
       
       toast({
-        title: 'Group deleted',
-        description: 'The group has been deleted successfully',
+        title: 'Group created!',
+        description: 'Your new group has been created successfully'
       });
       
-      // Update UI
-      setSelectedGroup(null);
-      setMyGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
-      setShowDeleteDialog(false);
-    } catch (error) {
-      console.error('Error deleting group:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to delete group. Please try again.',
-      });
-    }
-  };
-
-  // Leave a group
-  const handleLeaveGroup = async () => {
-    if (!selectedGroup || !currentUser) return;
-    
-    try {
-      // Delete member record
-      await deleteDoc(doc(db, 'groupMembers', `${currentUser.id}_${selectedGroup.id}`));
-      
-      // Update group member count
-      await updateDoc(doc(db, 'groups', selectedGroup.id), {
-        memberCount: selectedGroup.memberCount - 1
+      // Reset form
+      setNewGroup({
+        name: '',
+        description: '',
+        avatar: '',
+        is_private: true
       });
       
-      toast({
-        title: 'Left group',
-        description: 'You have left the group successfully',
-      });
+      setShowCreateGroupDialog(false);
       
-      // Update UI
-      setSelectedGroup(null);
-      setMyGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
-      setShowLeaveDialog(false);
-    } catch (error) {
-      console.error('Error leaving group:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to leave group. Please try again.',
-      });
-    }
-  };
-
-  // Join a group
-  const handleJoinGroup = async (group: Group) => {
-    if (!currentUser) return;
-    
-    try {
-      if (group.isPrivate) {
-        // For private groups, create a join request
-        setSelectedGroup(group);
-        setShowJoinRequestDialog(true);
-      } else {
-        // For public groups, join directly
-        await setDoc(doc(db, 'groupMembers', `${currentUser.id}_${group.id}`), {
-          groupId: group.id,
-          userId: currentUser.id,
-          role: 'member',
-          joinedAt: serverTimestamp()
-        });
+      // Refresh groups
+      await fetchUserGroups();
+      
+      // Select the newly created group
+      if (data) {
+        const { data: newGroupData, error: groupError } = await supabase
+          .from('groups')
+          .select('*')
+          .eq('id', data)
+          .single();
         
-        // Update group member count
-        await updateDoc(doc(db, 'groups', group.id), {
-          memberCount: group.memberCount + 1
-        });
-        
-        toast({
-          title: 'Joined group',
-          description: 'You have joined the group successfully',
-        });
-        
-        // Update UI
-        const updatedGroup = { ...group, memberCount: group.memberCount + 1 };
-        setMyGroups(prev => [...prev, updatedGroup]);
-        setSuggestedGroups(prev => prev.filter(g => g.id !== group.id));
-        setSelectedGroup(updatedGroup);
+        if (!groupError && newGroupData) {
+          setSelectedGroup(newGroupData);
+        }
       }
+    } catch (error) {
+      console.error('Error creating group:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to create group'
+      });
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const joinGroup = async () => {
+    if (!selectedSuggestion || processingAction) return;
+    
+    try {
+      setProcessingAction(true);
+      
+      const { error } = await supabase
+        .from('group_join_requests')
+        .insert({
+          group_id: selectedSuggestion.id,
+          user_id: currentUser.id,
+          message: joinMessage.trim() || null,
+          status: 'pending'
+        });
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Request sent!',
+        description: 'Your request to join the group has been sent'
+      });
+      
+      setJoinMessage('');
+      setSelectedSuggestion(null);
+      setShowJoinGroupDialog(false);
+      
+      // Refresh suggestions
+      fetchGroupSuggestions();
     } catch (error) {
       console.error('Error joining group:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to join group. Please try again.',
+        description: 'Failed to send join request'
       });
+    } finally {
+      setProcessingAction(false);
     }
   };
 
-  // Send join request
-  const handleSendJoinRequest = async () => {
-    if (!selectedGroup || !currentUser) return;
+  const approveJoinRequest = async (requestId: string) => {
+    if (processingAction) return;
     
     try {
-      await setDoc(doc(db, 'groupJoinRequests', `${currentUser.id}_${selectedGroup.id}`), {
-        groupId: selectedGroup.id,
-        userId: currentUser.id,
-        status: 'pending',
-        message: joinRequestMessage.trim(),
-        createdAt: serverTimestamp()
+      setProcessingAction(true);
+      
+      const { data, error } = await supabase.rpc('approve_group_join_request', {
+        request_uuid: requestId,
+        admin_uuid: currentUser.id
       });
       
-      toast({
-        title: 'Request sent',
-        description: 'Your request to join the group has been sent',
-      });
+      if (error) throw error;
       
-      setJoinRequestMessage('');
-      setShowJoinRequestDialog(false);
-    } catch (error) {
-      console.error('Error sending join request:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to send join request. Please try again.',
-      });
-    }
-  };
-
-  // Handle join request response (approve/reject)
-  const handleJoinRequestResponse = async (request: JoinRequest, approve: boolean) => {
-    try {
-      if (approve) {
-        // Add user as member
-        await setDoc(doc(db, 'groupMembers', `${request.userId}_${request.groupId}`), {
-          groupId: request.groupId,
-          userId: request.userId,
-          role: 'member',
-          joinedAt: serverTimestamp()
-        });
-        
-        // Update group member count
-        await updateDoc(doc(db, 'groups', request.groupId), {
-          memberCount: selectedGroup!.memberCount + 1
-        });
-        
+      if (data) {
         toast({
           title: 'Request approved',
-          description: 'The join request has been approved',
+          description: 'The user has been added to the group'
         });
+        
+        // Refresh join requests and members
+        fetchJoinRequests();
+        fetchGroupMembers();
       } else {
         toast({
-          title: 'Request rejected',
-          description: 'The join request has been rejected',
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Failed to approve request'
         });
       }
-      
-      // Update request status
-      await updateDoc(doc(db, 'groupJoinRequests', request.id), {
-        status: approve ? 'approved' : 'rejected'
-      });
-      
-      // Update UI
-      setJoinRequests(prev => prev.filter(r => r.id !== request.id));
     } catch (error) {
-      console.error('Error handling join request:', error);
+      console.error('Error approving join request:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to process join request. Please try again.',
+        description: 'Failed to approve request'
       });
+    } finally {
+      setProcessingAction(false);
     }
   };
 
-  // Format timestamp
-  const formatTimestamp = (timestamp: any) => {
-    if (!timestamp) return '';
+  const rejectJoinRequest = async (requestId: string) => {
+    if (processingAction) return;
     
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return formatDistanceToNow(date, { addSuffix: true });
+    try {
+      setProcessingAction(true);
+      
+      const { data, error } = await supabase.rpc('reject_group_join_request', {
+        request_uuid: requestId,
+        admin_uuid: currentUser.id
+      });
+      
+      if (error) throw error;
+      
+      if (data) {
+        toast({
+          title: 'Request rejected',
+          description: 'The join request has been rejected'
+        });
+        
+        // Refresh join requests
+        fetchJoinRequests();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Failed to reject request'
+        });
+      }
+    } catch (error) {
+      console.error('Error rejecting join request:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to reject request'
+      });
+    } finally {
+      setProcessingAction(false);
+    }
   };
 
-  // Filter groups by search query
-  const filteredGroups = (groups: Group[]) => {
-    if (!searchQuery.trim()) return groups;
+  const leaveGroup = async () => {
+    if (!selectedGroup || processingAction) return;
     
-    return groups.filter(group => 
-      group.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (group.description && group.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    try {
+      setProcessingAction(true);
+      
+      // Check if user is the only admin
+      const isAdmin = groupMembers.some(
+        member => member.user_id === currentUser.id && member.role === 'admin'
+      );
+      
+      const adminCount = groupMembers.filter(member => member.role === 'admin').length;
+      
+      if (isAdmin && adminCount === 1 && groupMembers.length > 1) {
+        toast({
+          variant: 'destructive',
+          title: 'Cannot leave group',
+          description: 'You are the only admin. Please promote another member to admin before leaving.'
+        });
+        setShowLeaveGroupConfirm(false);
+        return;
+      }
+      
+      // Delete the member record
+      const { error } = await supabase
+        .from('group_members')
+        .delete()
+        .eq('group_id', selectedGroup.id)
+        .eq('user_id', currentUser.id);
+      
+      if (error) throw error;
+      
+      // Update group member count
+      await supabase
+        .from('groups')
+        .update({ member_count: selectedGroup.member_count - 1 })
+        .eq('id', selectedGroup.id);
+      
+      toast({
+        title: 'Left group',
+        description: 'You have left the group successfully'
+      });
+      
+      setShowLeaveGroupConfirm(false);
+      
+      // Remove the group from the list and select another group
+      setGroups(prev => prev.filter(g => g.id !== selectedGroup.id));
+      setSelectedGroup(null);
+      
+      // Refresh groups
+      fetchUserGroups();
+    } catch (error) {
+      console.error('Error leaving group:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to leave group'
+      });
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const formatMessageTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const isUserAdmin = () => {
+    return groupMembers.some(
+      member => member.user_id === currentUser?.id && member.role === 'admin'
     );
   };
+
+  const pendingRequestsCount = joinRequests.length;
 
   return (
     <DashboardLayout>
@@ -765,173 +661,92 @@ export function Vortex() {
         <div className="flex h-full">
           {/* Groups List */}
           <div className={`w-full md:w-80 border-r flex flex-col ${selectedGroup ? 'hidden md:flex' : ''}`}>
-            {/* Header */}
-            <div className="p-3 border-b bg-muted/30 flex-shrink-0">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-social-purple" />
-                  <h2 className="font-pixelated text-sm font-medium">Vortex Groups</h2>
-                </div>
+            {/* Groups List Header */}
+            <div className="p-3 border-b bg-muted/30 flex-shrink-0 flex items-center justify-between">
+              <h2 className="font-pixelated text-sm font-medium flex items-center gap-2">
+                <Zap className="h-4 w-4 text-red-500" />
+                Vortex Groups
+              </h2>
+              <div className="flex gap-2">
                 <Button
-                  onClick={() => setShowCreateDialog(true)}
+                  onClick={() => setShowCreateGroupDialog(true)}
                   size="icon"
-                  className="h-7 w-7 rounded-full bg-social-purple hover:bg-social-purple/90 text-white"
+                  className="h-7 w-7 bg-social-green hover:bg-social-light-green text-white"
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
-              </div>
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search groups..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 h-8 font-pixelated text-xs"
-                />
+                <Button
+                  onClick={() => setShowJoinGroupDialog(true)}
+                  size="icon"
+                  className="h-7 w-7 bg-social-blue hover:bg-social-blue/90 text-white"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </Button>
               </div>
             </div>
 
-            {/* Groups List - Tabs */}
-            <Tabs defaultValue="myGroups" className="flex-1 flex flex-col">
-              <TabsList className="grid grid-cols-2 mx-3 mt-3">
-                <TabsTrigger value="myGroups" className="font-pixelated text-xs">My Groups</TabsTrigger>
-                <TabsTrigger value="discover" className="font-pixelated text-xs">Discover</TabsTrigger>
-              </TabsList>
-              
-              {/* My Groups Tab */}
-              <TabsContent value="myGroups" className="flex-1 overflow-hidden">
-                <ScrollArea className="h-full">
-                  {loading ? (
-                    <div className="p-3 space-y-2">
-                      {[1, 2, 3].map(i => (
-                        <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
-                          <div className="h-10 w-10 rounded-full bg-muted" />
-                          <div className="flex-1">
-                            <div className="h-3 w-20 bg-muted rounded mb-1" />
-                            <div className="h-2 w-24 bg-muted rounded" />
-                          </div>
+            {/* Groups List - Scrollable */}
+            <div className="flex-1 overflow-hidden">
+              <ScrollArea className="h-full">
+                {loading ? (
+                  <div className="space-y-2 p-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
+                        <div className="h-10 w-10 rounded-full bg-muted" />
+                        <div className="flex-1">
+                          <div className="h-3 w-20 bg-muted rounded mb-1" />
+                          <div className="h-2 w-24 bg-muted rounded" />
                         </div>
-                      ))}
-                    </div>
-                  ) : filteredGroups(myGroups).length > 0 ? (
-                    <div className="p-2">
-                      {filteredGroups(myGroups).map(group => (
-                        <div
-                          key={group.id}
-                          onClick={() => setSelectedGroup(group)}
-                          className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 ${
-                            selectedGroup?.id === group.id ? 'bg-accent shadow-md' : ''
-                          }`}
-                        >
-                          <Avatar className="h-10 w-10 border-2 border-background">
-                            {group.avatar ? (
-                              <AvatarImage src={group.avatar} />
-                            ) : (
-                              <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
-                                {group.name.substring(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            )}
-                          </Avatar>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1">
-                              <p className="font-medium truncate text-sm font-pixelated">
-                                {group.name}
-                              </p>
-                              {group.isPrivate && (
-                                <Lock className="h-3 w-3 text-muted-foreground" />
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate font-pixelated">
-                              {group.memberCount} {group.memberCount === 1 ? 'member' : 'members'}
-                            </p>
-                          </div>
-                          
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                      <Zap className="h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground mb-4 font-pixelated text-sm">No groups yet</p>
-                      <Button 
-                        onClick={() => setShowCreateDialog(true)}
-                        variant="outline" 
-                        className="font-pixelated text-xs"
+                      </div>
+                    ))}
+                  </div>
+                ) : groups.length > 0 ? (
+                  <div className="p-2">
+                    {groups.map(group => (
+                      <div
+                        key={group.id}
+                        onClick={() => setSelectedGroup(group)}
+                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 ${
+                          selectedGroup?.id === group.id ? 'bg-accent shadow-md' : ''
+                        }`}
                       >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Create Group
-                      </Button>
-                    </div>
-                  )}
-                </ScrollArea>
-              </TabsContent>
-              
-              {/* Discover Tab */}
-              <TabsContent value="discover" className="flex-1 overflow-hidden">
-                <ScrollArea className="h-full">
-                  {suggestedGroups.length > 0 ? (
-                    <div className="p-2">
-                      {filteredGroups(suggestedGroups).map(group => (
-                        <div
-                          key={group.id}
-                          className="flex items-center gap-3 p-2 rounded-lg transition-all duration-200 hover:bg-accent/50"
-                        >
-                          <Avatar className="h-10 w-10 border-2 border-background">
-                            {group.avatar ? (
-                              <AvatarImage src={group.avatar} />
-                            ) : (
-                              <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
-                                {group.name.substring(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            )}
-                          </Avatar>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1">
-                              <p className="font-medium truncate text-sm font-pixelated">
-                                {group.name}
-                              </p>
-                              {group.isPrivate ? (
-                                <Lock className="h-3 w-3 text-muted-foreground" />
-                              ) : (
-                                <Globe className="h-3 w-3 text-muted-foreground" />
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground truncate font-pixelated">
-                              {group.description || `${group.memberCount} members`}
-                            </p>
-                          </div>
-                          
-                          <Button
-                            onClick={() => handleJoinGroup(group)}
-                            size="sm"
-                            className="h-7 bg-social-purple hover:bg-social-purple/90 text-white font-pixelated text-xs"
-                          >
-                            <UserPlus className="h-3 w-3 mr-1" />
-                            Join
-                          </Button>
+                        <Avatar className="h-10 w-10 border-2 border-background">
+                          {group.avatar ? (
+                            <AvatarImage src={group.avatar} />
+                          ) : (
+                            <AvatarFallback className="bg-social-green text-white font-pixelated text-xs">
+                              {group.name.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate text-sm font-pixelated">
+                            {group.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate font-pixelated">
+                            {group.member_count} {group.member_count === 1 ? 'member' : 'members'}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                      <Globe className="h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground mb-4 font-pixelated text-sm">No groups to discover</p>
-                      <Button 
-                        onClick={() => setShowCreateDialog(true)}
-                        variant="outline" 
-                        className="font-pixelated text-xs"
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Create Group
-                      </Button>
-                    </div>
-                  )}
-                </ScrollArea>
-              </TabsContent>
-            </Tabs>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                    <Users className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-4 font-pixelated text-sm">No groups yet</p>
+                    <Button 
+                      onClick={() => setShowCreateGroupDialog(true)}
+                      variant="default" 
+                      className="font-pixelated text-xs bg-social-green hover:bg-social-light-green text-white"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Create Group
+                    </Button>
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
           </div>
 
           {/* Chat Area */}
@@ -939,252 +754,159 @@ export function Vortex() {
             {selectedGroup ? (
               <>
                 {/* Group Header */}
-                <div className="flex items-center justify-between p-3 border-b bg-muted/30">
-                  <div className="flex items-center gap-3">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => setSelectedGroup(null)}
-                      className="md:hidden h-8 w-8"
-                    >
-                      <ChevronRight className="h-4 w-4 rotate-180" />
-                    </Button>
-                    <Avatar className="h-8 w-8">
-                      {selectedGroup.avatar ? (
-                        <AvatarImage src={selectedGroup.avatar} />
-                      ) : (
-                        <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
-                          {selectedGroup.name.substring(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div>
-                      <div className="flex items-center gap-1">
-                        <p className="font-medium text-sm font-pixelated">{selectedGroup.name}</p>
-                        {selectedGroup.isPrivate && (
-                          <Lock className="h-3 w-3 text-muted-foreground" />
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground font-pixelated">
-                        {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                        >
-                          <Users className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-md">
-                        <DialogHeader>
-                          <DialogTitle className="font-pixelated text-sm">Group Members</DialogTitle>
-                        </DialogHeader>
-                        <div className="max-h-[300px] overflow-y-auto">
-                          {groupMembers.map(member => (
-                            <div key={member.id} className="flex items-center justify-between py-2">
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-8 w-8">
-                                  {member.profile?.avatar ? (
-                                    <AvatarImage src={member.profile.avatar} />
-                                  ) : (
-                                    <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
-                                      {member.profile?.name?.substring(0, 2).toUpperCase() || 'U'}
-                                    </AvatarFallback>
-                                  )}
-                                </Avatar>
-                                <div>
-                                  <p className="font-pixelated text-xs font-medium">
-                                    {member.profile?.name || 'Unknown User'}
-                                  </p>
-                                  <p className="font-pixelated text-xs text-muted-foreground">
-                                    @{member.profile?.username || 'unknown'}
-                                  </p>
-                                </div>
-                              </div>
-                              <Badge variant={member.role === 'admin' ? 'default' : 'outline'} className="font-pixelated text-xs">
-                                {member.role}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                    
-                    {isAdmin && joinRequests.length > 0 && (
-                      <Button
-                        onClick={() => setShowJoinRequestDialog(true)}
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 relative"
-                      >
-                        <UserPlus className="h-4 w-4" />
-                        <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center">
-                          {joinRequests.length}
-                        </span>
-                      </Button>
+                <div className="flex items-center gap-3 p-3 border-b bg-muted/30 flex-shrink-0">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => setSelectedGroup(null)}
+                    className="md:hidden flex-shrink-0 h-8 w-8"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                  <Avatar className="h-8 w-8 flex-shrink-0">
+                    {selectedGroup.avatar ? (
+                      <AvatarImage src={selectedGroup.avatar} />
+                    ) : (
+                      <AvatarFallback className="bg-social-green text-white font-pixelated text-xs">
+                        {selectedGroup.name.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
                     )}
-                    
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                        >
-                          <Info className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-md">
-                        <DialogHeader>
-                          <DialogTitle className="font-pixelated text-sm">Group Info</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div>
-                            <h3 className="font-pixelated text-xs font-medium mb-1">Description</h3>
-                            <p className="font-pixelated text-xs text-muted-foreground">
-                              {selectedGroup.description || 'No description provided'}
-                            </p>
-                          </div>
-                          <div>
-                            <h3 className="font-pixelated text-xs font-medium mb-1">Created</h3>
-                            <p className="font-pixelated text-xs text-muted-foreground">
-                              {formatTimestamp(selectedGroup.createdAt)}
-                            </p>
-                          </div>
-                          <div>
-                            <h3 className="font-pixelated text-xs font-medium mb-1">Privacy</h3>
-                            <div className="flex items-center gap-1">
-                              {selectedGroup.isPrivate ? (
-                                <>
-                                  <Lock className="h-3 w-3 text-muted-foreground" />
-                                  <p className="font-pixelated text-xs text-muted-foreground">Private</p>
-                                </>
-                              ) : (
-                                <>
-                                  <Globe className="h-3 w-3 text-muted-foreground" />
-                                  <p className="font-pixelated text-xs text-muted-foreground">Public</p>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <div className="pt-4 flex flex-col gap-2">
-                            {isAdmin ? (
-                              <Button
-                                onClick={() => {
-                                  setShowDeleteDialog(true);
-                                }}
-                                variant="destructive"
-                                className="font-pixelated text-xs"
-                              >
-                                <Trash2 className="h-3 w-3 mr-1" />
-                                Delete Group
-                              </Button>
-                            ) : (
-                              <Button
-                                onClick={() => {
-                                  setShowLeaveDialog(true);
-                                }}
-                                variant="destructive"
-                                className="font-pixelated text-xs"
-                              >
-                                <LogOut className="h-3 w-3 mr-1" />
-                                Leave Group
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate text-sm font-pixelated">{selectedGroup.name}</p>
+                    <p className="text-xs text-muted-foreground truncate font-pixelated">
+                      {selectedGroup.member_count} {selectedGroup.member_count === 1 ? 'member' : 'members'}
+                    </p>
                   </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem 
+                        onClick={() => setShowGroupInfoDialog(true)}
+                        className="font-pixelated text-xs"
+                      >
+                        <Info className="h-3 w-3 mr-2" />
+                        Group Info
+                      </DropdownMenuItem>
+                      <DropdownMenuItem 
+                        onClick={() => setShowMembersDialog(true)}
+                        className="font-pixelated text-xs"
+                      >
+                        <Users className="h-3 w-3 mr-2" />
+                        Members ({selectedGroup.member_count})
+                      </DropdownMenuItem>
+                      {isUserAdmin() && (
+                        <DropdownMenuItem 
+                          onClick={() => setShowJoinRequestsDialog(true)}
+                          className="font-pixelated text-xs relative"
+                        >
+                          <UserPlus className="h-3 w-3 mr-2" />
+                          Join Requests
+                          {pendingRequestsCount > 0 && (
+                            <Badge 
+                              variant="destructive" 
+                              className="ml-2 h-4 w-4 p-0 text-xs flex items-center justify-center"
+                            >
+                              {pendingRequestsCount}
+                            </Badge>
+                          )}
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem 
+                        onClick={() => setShowLeaveGroupConfirm(true)}
+                        className="text-destructive font-pixelated text-xs"
+                      >
+                        <X className="h-3 w-3 mr-2" />
+                        Leave Group
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
                 {/* Messages Area */}
                 <div className="flex-1 overflow-hidden">
-                  <ScrollArea className="h-full p-4">
-                    {messages.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full">
-                        <MessageSquare className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
-                        <h3 className="font-pixelated text-sm font-medium mb-2">No messages yet</h3>
-                        <p className="font-pixelated text-xs text-muted-foreground text-center max-w-sm">
-                          Be the first to send a message in this group!
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {messages.map((message) => {
-                          const isCurrentUser = message.senderId === currentUser?.id;
+                  <ScrollArea className="h-full">
+                    <div className="p-3 space-y-3">
+                      {groupMessages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12">
+                          <MessageSquare className="h-16 w-16 text-muted-foreground mb-4" />
+                          <h3 className="font-pixelated text-sm font-medium mb-2">No messages yet</h3>
+                          <p className="font-pixelated text-xs text-muted-foreground text-center max-w-xs">
+                            Be the first to send a message in this group!
+                          </p>
+                        </div>
+                      ) : (
+                        groupMessages.map((message) => {
+                          const isCurrentUser = message.sender_id === currentUser?.id;
                           
                           return (
                             <div 
                               key={message.id}
-                              className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
+                              className={`flex gap-2 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
                             >
                               <div className={`flex gap-2 max-w-[75%] ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                                <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
-                                  {message.senderAvatar ? (
-                                    <AvatarImage src={message.senderAvatar} />
+                                <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
+                                  {message.sender_avatar ? (
+                                    <AvatarImage src={message.sender_avatar} />
                                   ) : (
-                                    <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
-                                      {message.senderName?.substring(0, 2).toUpperCase() || 'U'}
+                                    <AvatarFallback className="bg-social-green text-white font-pixelated text-xs">
+                                      {message.sender_name.substring(0, 2).toUpperCase()}
                                     </AvatarFallback>
                                   )}
                                 </Avatar>
                                 <div 
-                                  className={`p-3 rounded-lg relative ${
+                                  className={`p-2 rounded-lg relative ${
                                     isCurrentUser 
-                                      ? 'bg-social-purple text-white' 
+                                      ? 'bg-social-green text-white' 
                                       : 'bg-muted'
                                   }`}
                                 >
                                   {!isCurrentUser && (
-                                    <p className="font-pixelated text-xs font-medium mb-1">
-                                      {message.senderName}
+                                    <p className="text-xs font-medium mb-1 font-pixelated">
+                                      {message.sender_name}
                                     </p>
                                   )}
-                                  <p className="font-pixelated text-xs whitespace-pre-wrap break-words">
+                                  <p className="text-xs whitespace-pre-wrap break-words font-pixelated">
                                     {message.content}
                                   </p>
-                                  <p className="font-pixelated text-xs opacity-70 mt-1 text-right">
-                                    {formatTimestamp(message.createdAt)}
+                                  <p className="text-xs opacity-70 mt-1 text-right font-pixelated">
+                                    {formatMessageTime(message.created_at)}
                                   </p>
                                 </div>
                               </div>
                             </div>
                           );
-                        })}
-                        <div ref={messagesEndRef} />
-                      </div>
-                    )}
+                        })
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
                   </ScrollArea>
                 </div>
 
                 {/* Message Input */}
-                <div className="border-t p-3">
+                <div className="border-t bg-background p-3">
                   <div className="flex gap-2">
-                    <Textarea
-                      placeholder="Type a message..."
+                    <Textarea 
+                      placeholder="Type a message..." 
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
-                          handleSendMessage();
+                          sendMessage();
                         }
                       }}
-                      className="min-h-[60px] max-h-[120px] font-pixelated text-xs resize-none"
+                      className="min-h-[52px] max-h-[120px] resize-none flex-1 font-pixelated text-xs"
+                      disabled={sendingMessage}
                     />
                     <Button
-                      onClick={handleSendMessage}
+                      onClick={sendMessage}
                       disabled={!newMessage.trim() || sendingMessage}
-                      className="bg-social-purple hover:bg-social-purple/90 text-white self-end"
+                      className="bg-social-green hover:bg-social-light-green text-white flex-shrink-0 h-[52px] w-12"
                     >
                       <Send className="h-4 w-4" />
                     </Button>
@@ -1193,57 +915,27 @@ export function Vortex() {
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <Zap className="h-16 w-16 text-social-purple mb-6" />
-                <h2 className="text-xl font-bold mb-2 font-pixelated">Welcome to Vortex</h2>
-                <p className="text-muted-foreground mb-6 font-pixelated text-sm max-w-md">
-                  Create or join groups to chat with multiple people at once. Collaborate with friends, family, or communities.
+                <Zap className="h-16 w-16 text-red-500 mb-4" />
+                <h2 className="text-lg font-semibold mb-2 font-pixelated">Welcome to Vortex</h2>
+                <p className="text-muted-foreground font-pixelated text-sm mb-6 max-w-md">
+                  Create or join groups to start chatting with friends and communities in real-time.
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md">
-                  <Card className="hover:shadow-md transition-all duration-200">
-                    <CardContent className="p-4 text-center">
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 rounded-full bg-social-purple/10 flex items-center justify-center mb-3">
-                          <Plus className="h-6 w-6 text-social-purple" />
-                        </div>
-                        <h3 className="font-pixelated text-sm font-medium mb-1">Create Group</h3>
-                        <p className="font-pixelated text-xs text-muted-foreground mb-3">
-                          Start your own community
-                        </p>
-                        <Button 
-                          onClick={() => setShowCreateDialog(true)}
-                          className="bg-social-purple hover:bg-social-purple/90 text-white font-pixelated text-xs w-full"
-                        >
-                          Create Group
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card className="hover:shadow-md transition-all duration-200">
-                    <CardContent className="p-4 text-center">
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 rounded-full bg-social-blue/10 flex items-center justify-center mb-3">
-                          <Search className="h-6 w-6 text-social-blue" />
-                        </div>
-                        <h3 className="font-pixelated text-sm font-medium mb-1">Find Groups</h3>
-                        <p className="font-pixelated text-xs text-muted-foreground mb-3">
-                          Discover and join communities
-                        </p>
-                        <Button 
-                          onClick={() => {
-                            const tabsElement = document.querySelector('[data-state="inactive"][value="discover"]');
-                            if (tabsElement) {
-                              (tabsElement as HTMLElement).click();
-                            }
-                          }}
-                          variant="outline"
-                          className="font-pixelated text-xs w-full"
-                        >
-                          Browse Groups
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                <div className="flex gap-3">
+                  <Button 
+                    onClick={() => setShowCreateGroupDialog(true)}
+                    className="font-pixelated text-xs bg-social-green hover:bg-social-light-green text-white"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Create Group
+                  </Button>
+                  <Button 
+                    onClick={() => setShowJoinGroupDialog(true)}
+                    variant="outline"
+                    className="font-pixelated text-xs"
+                  >
+                    <UserPlus className="h-3 w-3 mr-1" />
+                    Join Group
+                  </Button>
                 </div>
               </div>
             )}
@@ -1252,128 +944,321 @@ export function Vortex() {
       </div>
 
       {/* Create Group Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-md">
+      <Dialog open={showCreateGroupDialog} onOpenChange={setShowCreateGroupDialog}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-pixelated">Create New Group</DialogTitle>
+            <DialogTitle className="font-pixelated text-lg">Create New Group</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <p className="font-pixelated text-xs text-muted-foreground">
-              Create a private group to chat with multiple people at once.
-            </p>
-            
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label className="font-pixelated text-xs">Group Name</label>
+              <label className="text-sm font-medium font-pixelated">Group Name</label>
               <Input
-                value={newGroupName}
-                onChange={(e) => {
-                  setNewGroupName(e.target.value);
-                  setNameError('');
-                }}
                 placeholder="Enter group name"
+                value={newGroup.name}
+                onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
                 className="font-pixelated text-xs"
               />
-              {nameError && (
-                <p className="text-destructive font-pixelated text-xs">{nameError}</p>
-              )}
             </div>
-            
             <div className="space-y-2">
-              <label className="font-pixelated text-xs">Description</label>
+              <label className="text-sm font-medium font-pixelated">Description</label>
               <Textarea
-                value={newGroupDescription}
-                onChange={(e) => setNewGroupDescription(e.target.value)}
                 placeholder="Enter group description"
-                className="font-pixelated text-xs resize-none min-h-[80px]"
+                value={newGroup.description}
+                onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
+                className="font-pixelated text-xs"
               />
             </div>
-            
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  id="private"
-                  checked={isPrivate}
-                  onChange={() => setIsPrivate(true)}
-                  className="h-4 w-4 text-social-purple"
-                />
-                <label htmlFor="private" className="font-pixelated text-xs flex items-center gap-1">
-                  <Lock className="h-3 w-3" /> Private
-                </label>
+            <div className="space-y-2">
+              <label className="text-sm font-medium font-pixelated">Avatar URL (optional)</label>
+              <Input
+                placeholder="Enter avatar URL"
+                value={newGroup.avatar}
+                onChange={(e) => setNewGroup({ ...newGroup, avatar: e.target.value })}
+                className="font-pixelated text-xs"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="is_private"
+                checked={newGroup.is_private}
+                onChange={(e) => setNewGroup({ ...newGroup, is_private: e.target.checked })}
+                className="rounded border-gray-300"
+              />
+              <label htmlFor="is_private" className="text-sm font-pixelated">
+                Private Group (members must be approved)
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => setShowCreateGroupDialog(false)}
+              variant="outline"
+              className="font-pixelated text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={createGroup}
+              disabled={!newGroup.name.trim() || processingAction}
+              className="font-pixelated text-xs bg-social-green hover:bg-social-light-green text-white"
+            >
+              {processingAction ? 'Creating...' : 'Create Group'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Join Group Dialog */}
+      <Dialog open={showJoinGroupDialog} onOpenChange={setShowJoinGroupDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-pixelated text-lg">Join a Group</DialogTitle>
+            <DialogDescription className="font-pixelated text-xs">
+              Discover groups with your friends
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {groupSuggestions.length > 0 ? (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium font-pixelated">Suggested Groups</h3>
+                {groupSuggestions.map(group => (
+                  <Card 
+                    key={group.id}
+                    className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                      selectedSuggestion?.id === group.id ? 'border-social-green' : ''
+                    }`}
+                    onClick={() => setSelectedSuggestion(group)}
+                  >
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          {group.avatar ? (
+                            <AvatarImage src={group.avatar} />
+                          ) : (
+                            <AvatarFallback className="bg-social-green text-white font-pixelated text-xs">
+                              {group.name.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div className="flex-1">
+                          <h4 className="font-pixelated text-sm font-medium">{group.name}</h4>
+                          <p className="font-pixelated text-xs text-muted-foreground">
+                            {group.member_count} members • {group.mutual_members} mutual friends
+                          </p>
+                          {group.description && (
+                            <p className="font-pixelated text-xs mt-1 line-clamp-1">
+                              {group.description}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                
+                {selectedSuggestion && (
+                  <div className="space-y-2 pt-2">
+                    <h3 className="text-sm font-medium font-pixelated">Join Request Message (Optional)</h3>
+                    <Textarea
+                      placeholder="Why do you want to join this group?"
+                      value={joinMessage}
+                      onChange={(e) => setJoinMessage(e.target.value)}
+                      className="font-pixelated text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <Users className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                <h3 className="font-pixelated text-sm font-medium mb-1">No suggestions found</h3>
+                <p className="font-pixelated text-xs text-muted-foreground">
+                  We couldn't find any groups to suggest. Try creating your own group!
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setShowJoinGroupDialog(false);
+                setSelectedSuggestion(null);
+                setJoinMessage('');
+              }}
+              variant="outline"
+              className="font-pixelated text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={joinGroup}
+              disabled={!selectedSuggestion || processingAction}
+              className="font-pixelated text-xs bg-social-blue hover:bg-social-blue/90 text-white"
+            >
+              {processingAction ? 'Sending...' : 'Send Join Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Group Info Dialog */}
+      <Dialog open={showGroupInfoDialog} onOpenChange={setShowGroupInfoDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-pixelated text-lg">Group Information</DialogTitle>
+          </DialogHeader>
+          {selectedGroup && (
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-16 w-16">
+                  {selectedGroup.avatar ? (
+                    <AvatarImage src={selectedGroup.avatar} />
+                  ) : (
+                    <AvatarFallback className="bg-social-green text-white font-pixelated text-sm">
+                      {selectedGroup.name.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+                <div>
+                  <h3 className="font-pixelated text-lg font-medium">{selectedGroup.name}</h3>
+                  <p className="font-pixelated text-xs text-muted-foreground">
+                    Created {formatDistanceToNow(new Date(selectedGroup.created_at), { addSuffix: true })}
+                  </p>
+                </div>
               </div>
               
-              <div className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  id="public"
-                  checked={!isPrivate}
-                  onChange={() => setIsPrivate(false)}
-                  className="h-4 w-4 text-social-purple"
-                />
-                <label htmlFor="public" className="font-pixelated text-xs flex items-center gap-1">
-                  <Globe className="h-3 w-3" /> Public
-                </label>
+              <div className="space-y-2">
+                <h4 className="font-pixelated text-sm font-medium">Description</h4>
+                <p className="font-pixelated text-xs bg-muted p-3 rounded-md">
+                  {selectedGroup.description || 'No description provided'}
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-muted p-3 rounded-md text-center">
+                  <p className="font-pixelated text-sm font-medium">{selectedGroup.member_count}</p>
+                  <p className="font-pixelated text-xs text-muted-foreground">Members</p>
+                </div>
+                <div className="bg-muted p-3 rounded-md text-center">
+                  <p className="font-pixelated text-sm font-medium">
+                    {selectedGroup.is_private ? 'Private' : 'Public'}
+                  </p>
+                  <p className="font-pixelated text-xs text-muted-foreground">Group Type</p>
+                </div>
               </div>
             </div>
-            
-            <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
-              <Info className="h-4 w-4 text-muted-foreground" />
-              <p className="font-pixelated text-xs text-muted-foreground">
-                {isPrivate 
-                  ? 'Private groups are only visible to members and require an invitation to join.'
-                  : 'Public groups can be discovered and joined by anyone.'}
-              </p>
-            </div>
-            
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowCreateDialog(false);
-                  setNewGroupName('');
-                  setNewGroupDescription('');
-                  setNameError('');
-                }}
-                className="font-pixelated text-xs"
-                disabled={creatingGroup}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleCreateGroup}
-                className="bg-social-purple hover:bg-social-purple/90 text-white font-pixelated text-xs"
-                disabled={!newGroupName.trim() || creatingGroup}
-              >
-                {creatingGroup ? 'Creating...' : 'Create Group'}
-              </Button>
-            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Members Dialog */}
+      <Dialog open={showMembersDialog} onOpenChange={setShowMembersDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-pixelated text-lg">Group Members</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            {groupMembers.map(member => (
+              <div key={member.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-8 w-8">
+                    {member.avatar ? (
+                      <AvatarImage src={member.avatar} />
+                    ) : (
+                      <AvatarFallback className="bg-social-green text-white font-pixelated text-xs">
+                        {member.name.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                  <div>
+                    <p className="font-pixelated text-sm font-medium">{member.name}</p>
+                    <p className="font-pixelated text-xs text-muted-foreground">@{member.username}</p>
+                  </div>
+                </div>
+                <Badge variant={member.role === 'admin' ? 'default' : 'outline'} className="font-pixelated text-xs">
+                  {member.role === 'admin' ? 'Admin' : 'Member'}
+                </Badge>
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Group Confirmation */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="font-pixelated">Delete Group</AlertDialogTitle>
-            <AlertDialogDescription className="font-pixelated text-xs">
-              Are you sure you want to delete this group? This action cannot be undone and all messages will be permanently deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="font-pixelated text-xs">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteGroup}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Join Requests Dialog */}
+      <Dialog open={showJoinRequestsDialog} onOpenChange={setShowJoinRequestsDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-pixelated text-lg">Join Requests</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+            {joinRequests.length > 0 ? (
+              joinRequests.map(request => (
+                <Card key={request.id} className="overflow-hidden">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-3 mb-2">
+                      <Avatar className="h-8 w-8">
+                        {request.avatar ? (
+                          <AvatarImage src={request.avatar} />
+                        ) : (
+                          <AvatarFallback className="bg-social-green text-white font-pixelated text-xs">
+                            {request.name.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-pixelated text-sm font-medium">{request.name}</p>
+                        <p className="font-pixelated text-xs text-muted-foreground">
+                          Requested {formatDistanceToNow(new Date(request.created_at), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {request.message && (
+                      <p className="font-pixelated text-xs bg-muted p-2 rounded-md mb-3">
+                        {request.message}
+                      </p>
+                    )}
+                    
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        onClick={() => rejectJoinRequest(request.id)}
+                        variant="outline"
+                        size="sm"
+                        className="font-pixelated text-xs"
+                        disabled={processingAction}
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Reject
+                      </Button>
+                      <Button
+                        onClick={() => approveJoinRequest(request.id)}
+                        size="sm"
+                        className="font-pixelated text-xs bg-social-green hover:bg-social-light-green text-white"
+                        disabled={processingAction}
+                      >
+                        <UserCheck className="h-3 w-3 mr-1" />
+                        Approve
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <div className="text-center py-6">
+                <UserPlus className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                <h3 className="font-pixelated text-sm font-medium mb-1">No pending requests</h3>
+                <p className="font-pixelated text-xs text-muted-foreground">
+                  When users request to join your group, they'll appear here.
+                </p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Leave Group Confirmation */}
-      <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+      <AlertDialog open={showLeaveGroupConfirm} onOpenChange={setShowLeaveGroupConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="font-pixelated">Leave Group</AlertDialogTitle>
@@ -1384,132 +1269,15 @@ export function Vortex() {
           <AlertDialogFooter>
             <AlertDialogCancel className="font-pixelated text-xs">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleLeaveGroup}
+              onClick={leaveGroup}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
+              disabled={processingAction}
             >
-              Leave
+              {processingAction ? 'Leaving...' : 'Leave Group'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Join Request Dialog */}
-      <Dialog open={showJoinRequestDialog} onOpenChange={setShowJoinRequestDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-pixelated">Join Request</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="font-pixelated text-xs text-muted-foreground">
-              Send a request to join <span className="font-medium">{selectedGroup?.name}</span>. The group admin will need to approve your request.
-            </p>
-            
-            <div className="space-y-2">
-              <label className="font-pixelated text-xs">Message (Optional)</label>
-              <Textarea
-                value={joinRequestMessage}
-                onChange={(e) => setJoinRequestMessage(e.target.value)}
-                placeholder="Why do you want to join this group?"
-                className="font-pixelated text-xs resize-none min-h-[80px]"
-              />
-            </div>
-            
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowJoinRequestDialog(false);
-                  setJoinRequestMessage('');
-                }}
-                className="font-pixelated text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSendJoinRequest}
-                className="bg-social-purple hover:bg-social-purple/90 text-white font-pixelated text-xs"
-              >
-                Send Request
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Join Requests Dialog */}
-      <Dialog open={showJoinRequestDialog && isAdmin && joinRequests.length > 0} onOpenChange={setShowJoinRequestDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-pixelated">Join Requests</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="font-pixelated text-xs text-muted-foreground">
-              {joinRequests.length} {joinRequests.length === 1 ? 'person' : 'people'} requesting to join {selectedGroup?.name}
-            </p>
-            
-            <div className="max-h-[300px] overflow-y-auto space-y-3">
-              {joinRequests.map(request => (
-                <div key={request.id} className="border rounded-lg p-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Avatar className="h-8 w-8">
-                      {request.profile?.avatar ? (
-                        <AvatarImage src={request.profile.avatar} />
-                      ) : (
-                        <AvatarFallback className="bg-social-purple text-white font-pixelated text-xs">
-                          {request.profile?.name?.substring(0, 2).toUpperCase() || 'U'}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div>
-                      <p className="font-pixelated text-xs font-medium">
-                        {request.profile?.name || 'Unknown User'}
-                      </p>
-                      <p className="font-pixelated text-xs text-muted-foreground">
-                        @{request.profile?.username || 'unknown'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {request.message && (
-                    <div className="bg-muted/50 p-2 rounded-md mb-3">
-                      <p className="font-pixelated text-xs">
-                        {request.message}
-                      </p>
-                    </div>
-                  )}
-                  
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      onClick={() => handleJoinRequestResponse(request, false)}
-                      variant="outline"
-                      size="sm"
-                      className="font-pixelated text-xs h-7"
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Reject
-                    </Button>
-                    <Button
-                      onClick={() => handleJoinRequestResponse(request, true)}
-                      size="sm"
-                      className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs h-7"
-                    >
-                      <Check className="h-3 w-3 mr-1" />
-                      Approve
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            <Button
-              onClick={() => setShowJoinRequestDialog(false)}
-              className="w-full font-pixelated text-xs"
-            >
-              Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 }
