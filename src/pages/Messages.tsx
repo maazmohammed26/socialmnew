@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Send, MessageSquare, User, ArrowLeft, UserX, Circle, Heart, Search } from 'lucide-react';
+import { Send, MessageSquare, User, ArrowLeft, UserX, Circle, Heart, X } from 'lucide-react';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -586,9 +586,18 @@ export function Messages() {
                     placeholder="Search messages..."
                     value={searchQuery}
                     onChange={handleSearch}
-                    className="w-full h-8 pl-8 font-pixelated text-xs"
+                    className="w-full h-8 font-pixelated text-xs"
                   />
-                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  {searchQuery && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 hover:bg-muted/50"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -690,7 +699,7 @@ export function Messages() {
                   <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                     {searchQuery ? (
                       <>
-                        <Search className="h-12 w-12 text-muted-foreground mb-4" />
+                        <User className="h-12 w-12 text-muted-foreground mb-4" />
                         <p className="text-muted-foreground mb-4 font-pixelated text-sm">No friends match your search</p>
                         <Button variant="outline" onClick={() => setSearchQuery('')} className="font-pixelated text-xs">
                           Clear Search
