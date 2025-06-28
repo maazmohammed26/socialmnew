@@ -106,64 +106,6 @@ export function Index() {
         </div>
       </section>
       
-      {/* About Us Section */}
-      <section className="py-10 px-3 sm:px-6 bg-gradient-to-t from-background to-muted/10">
-        <div className="container mx-auto max-w-4xl">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl sm:text-3xl font-bold font-pixelated social-gradient bg-clip-text text-transparent">About SocialChat</h2>
-            <p className="text-sm sm:text-base text-muted-foreground font-pixelated mt-2">
-              Also known as SocialChat Site - Developed by Mohammed Maaz A
-            </p>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
-            <p className="font-pixelated text-sm sm:text-base mb-4">
-              SocialChat was created in 2025 as a modern social messaging platform that combines the best features of social media and instant messaging. Our goal is to provide a seamless experience for connecting with friends, sharing moments, and engaging in meaningful conversations.
-            </p>
-            
-            <p className="font-pixelated text-sm sm:text-base mb-4">
-              Developed entirely by Mohammed Maaz A, SocialChat aims to deliver a user-friendly interface with powerful features like real-time messaging, social feeds, stories, and upcoming group chats.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-6">
-              <a 
-                href="https://www.linkedin.com/company/socialchatmz" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-pixelated text-xs"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path>
-                </svg>
-                Follow on LinkedIn
-              </a>
-              
-              <a 
-                href="https://www.facebook.com/people/SocialChat/61577763366327/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-pixelated text-xs"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z"></path>
-                </svg>
-                Follow on Facebook
-              </a>
-              
-              <a 
-                href="/about.html" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-social-green text-white rounded-md hover:bg-social-light-green transition-colors font-pixelated text-xs"
-              >
-                <User className="h-4 w-4" />
-                Learn More
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-      
       {/* Footer */}
       <footer className="border-t py-4 sm:py-8 bg-background">
         <div className="container mx-auto px-3 sm:px-6 text-sm text-muted-foreground text-center">

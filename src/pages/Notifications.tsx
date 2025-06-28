@@ -23,9 +23,7 @@ import {
   WifiOff,
   UserX,
   Settings,
-  Palette,
-  Sparkles,
-  ExternalLink
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -262,41 +260,6 @@ export function Notifications() {
     }
   };
 
-  // Format notification content to make links clickable
-  const formatNotificationContent = (content: string) => {
-    // Check if content contains a URL
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    if (urlRegex.test(content)) {
-      const parts = content.split(urlRegex);
-      const matches = content.match(urlRegex) || [];
-      
-      return (
-        <>
-          {parts.map((part, i) => {
-            // If this is an odd index and we have a match, it's a URL
-            if (i % 2 === 1 && matches[Math.floor(i/2)]) {
-              return (
-                <a 
-                  key={i} 
-                  href={matches[Math.floor(i/2)]} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-social-blue hover:underline inline-flex items-center gap-0.5"
-                >
-                  {matches[Math.floor(i/2)]}
-                  <ExternalLink className="h-2.5 w-2.5 inline-block" />
-                </a>
-              );
-            }
-            return part;
-          })}
-        </>
-      );
-    }
-    
-    return content;
-  };
-
   useEffect(() => {
     fetchNotifications();
     
@@ -312,17 +275,9 @@ export function Notifications() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Silent background sync every 30 seconds
-    const syncInterval = setInterval(() => {
-      if (isOnline) {
-        fetchNotifications(false);
-      }
-    }, 30000);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      clearInterval(syncInterval);
     };
   }, [isOnline]);
 
@@ -393,7 +348,6 @@ export function Notifications() {
               size="icon"
               variant="outline"
               className="h-8 w-8 rounded-full"
-              title="Information"
             >
               <Info className="h-4 w-4" />
             </Button>
@@ -458,33 +412,8 @@ export function Notifications() {
           </div>
         )}
 
-        {/* Theme Customization Highlight */}
-        <div className="mx-4 mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-l-4 border-blue-400 rounded-lg shadow-sm">
-          <div className="flex items-start gap-3">
-            <Palette className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-pixelated text-sm font-medium text-blue-800">
-                Customize Your Experience
-              </p>
-              <p className="font-pixelated text-xs text-blue-700 mt-1 leading-relaxed">
-                Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!
-              </p>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <Button
-                  onClick={() => window.location.href = '/profile'}
-                  size="sm"
-                  className="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-pixelated text-xs"
-                >
-                  <Sparkles className="h-3 w-3 mr-1" />
-                  Change Theme
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Content */}
-        <ScrollArea className="h-[calc(100vh-240px)] p-4 scroll-container scroll-smooth">
+        <ScrollArea className="h-[calc(100vh-180px)] p-4 scroll-container scroll-smooth">
           {notifications.length > 0 ? (
             <div className="space-y-3 pb-4">
               {notifications.map((notification) => (
@@ -506,7 +435,7 @@ export function Notifications() {
                         <p className={`font-pixelated text-sm leading-relaxed break-words ${
                           !notification.read ? 'font-medium text-foreground' : 'text-muted-foreground'
                         }`}>
-                          {formatNotificationContent(notification.content)}
+                          {notification.content}
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                           <p className="font-pixelated text-xs text-muted-foreground">
