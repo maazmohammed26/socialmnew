@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { OneSignalNotificationBanner } from '@/components/notifications/OneSignalNotificationBanner';
+import { SocialChatAnnouncement } from '@/components/notifications/SocialChatAnnouncements';
 import { useOneSignalNotifications } from '@/hooks/use-onesignal-notifications';
 import { 
   Bell, 
@@ -23,7 +24,8 @@ import {
   UserX,
   Settings,
   Palette,
-  Sparkles
+  Sparkles,
+  ExternalLink
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -39,6 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { getCachedItems, cacheItems, STORES } from '@/lib/cache-utils';
 
 interface Notification {
   id: string;
@@ -56,6 +59,7 @@ export function Notifications() {
   const [showInfo, setShowInfo] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showNotificationBanner, setShowNotificationBanner] = useState(true);
+  const [showAnnouncement, setShowAnnouncement] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -70,6 +74,14 @@ export function Notifications() {
       if (!user) return;
 
       setCurrentUser(user);
+
+      // Try to get notifications from cache first
+      const cachedNotifications = await getCachedItems(STORES.NOTIFICATIONS);
+      if (cachedNotifications && cachedNotifications.length > 0) {
+        console.log('Using cached notifications');
+        setNotifications(cachedNotifications);
+        setLoading(false);
+      }
 
       // Fetch notifications from database
       const { data, error } = await supabase
@@ -92,8 +104,18 @@ export function Notifications() {
           .order('created_at', { ascending: false });
         
         setNotifications(retryData || []);
+        
+        // Cache the notifications
+        if (retryData && retryData.length > 0) {
+          await cacheItems(STORES.NOTIFICATIONS, retryData);
+        }
       } else {
         setNotifications(data || []);
+        
+        // Cache the notifications
+        if (data && data.length > 0) {
+          await cacheItems(STORES.NOTIFICATIONS, data);
+        }
       }
     } catch (error) {
       console.error('Error in fetchNotifications:', error);
@@ -110,6 +132,18 @@ export function Notifications() {
           user_id: userId,
           type: 'system',
           content: "💡 Don't like the pixel font? No problem! Visit your Profile section to change themes and customize fonts & colors to your preference.",
+          read: false
+        },
+        {
+          user_id: userId,
+          type: 'system',
+          content: "🎨 Try our modern themes for a sleek experience! Visit your profile to change themes.",
+          read: false
+        },
+        {
+          user_id: userId,
+          type: 'system',
+          content: "🔗 Follow SocialChat on LinkedIn for updates and news! https://www.linkedin.com/company/socialchatmz",
           read: false
         },
         {
@@ -338,6 +372,41 @@ export function Notifications() {
     }
   };
 
+  // Format notification content to make links clickable
+  const formatNotificationContent = (content: string) => {
+    // Check if content contains a URL
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    if (urlRegex.test(content)) {
+      const parts = content.split(urlRegex);
+      const matches = content.match(urlRegex) || [];
+      
+      return (
+        <>
+          {parts.map((part, i) => {
+            // If this is an odd index and we have a match, it's a URL
+            if (i % 2 === 1 && matches[Math.floor(i/2)]) {
+              return (
+                <a 
+                  key={i} 
+                  href={matches[Math.floor(i/2)]} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-social-blue hover:underline inline-flex items-center gap-0.5"
+                >
+                  {matches[Math.floor(i/2)]}
+                  <ExternalLink className="h-2.5 w-2.5 inline-block" />
+                </a>
+              );
+            }
+            return part;
+          })}
+        </>
+      );
+    }
+    
+    return content;
+  };
+
   useEffect(() => {
     fetchNotifications();
     
@@ -507,6 +576,11 @@ export function Notifications() {
           <OneSignalNotificationBanner onDismiss={() => setShowNotificationBanner(false)} />
         )}
 
+        {/* SocialChat Announcement */}
+        {showAnnouncement && (
+          <SocialChatAnnouncement onDismiss={() => setShowAnnouncement(false)} />
+        )}
+
         {/* Push Notification Status */}
         {oneSignalUser.subscribed && (
           <div className="mx-4 mt-4 p-3 bg-social-green/10 border border-social-green/20 rounded-lg">
@@ -542,14 +616,28 @@ export function Notifications() {
               <p className="font-pixelated text-xs text-blue-700 mt-1 leading-relaxed">
                 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!
               </p>
-              <Button
-                onClick={() => window.location.href = '/profile'}
-                size="sm"
-                className="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-pixelated text-xs"
-              >
-                <Sparkles className="h-3 w-3 mr-1" />
-                Change Theme
-              </Button>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <Button
+                  onClick={() => window.location.href = '/profile'}
+                  size="sm"
+                  className="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-pixelated text-xs"
+                >
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  Change Theme
+                </Button>
+                <Button
+                  component="a"
+                  href="https://www.linkedin.com/company/socialchatmz"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 font-pixelated text-xs"
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  Follow on LinkedIn
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -577,7 +665,7 @@ export function Notifications() {
                         <p className={`font-pixelated text-sm leading-relaxed ${
                           !notification.read ? 'font-medium text-foreground' : 'text-muted-foreground'
                         }`}>
-                          {notification.content}
+                          {formatNotificationContent(notification.content)}
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                           <p className="font-pixelated text-xs text-muted-foreground">
@@ -682,6 +770,22 @@ export function Notifications() {
                   <div>
                     <p className="font-pixelated text-xs font-medium">Theme Customization</p>
                     <p className="font-pixelated text-xs text-muted-foreground">Change fonts, colors, and visual style in Profile</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
+                  <ExternalLink className="h-4 w-4 text-purple-500" />
+                  <div>
+                    <p className="font-pixelated text-xs font-medium">SocialChat Updates</p>
+                    <p className="font-pixelated text-xs text-muted-foreground">
+                      Follow us on <a 
+                        href="https://www.linkedin.com/company/socialchatmz" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-purple-500 hover:underline"
+                      >
+                        LinkedIn
+                      </a> for the latest news
+                    </p>
                   </div>
                 </div>
               </div>

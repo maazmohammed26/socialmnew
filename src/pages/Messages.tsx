@@ -10,6 +10,13 @@ import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { 
+  getCachedItems, 
+  cacheItems, 
+  getCachedItemsByIndex,
+  STORES,
+  CACHE_EXPIRATION
+} from '@/lib/cache-utils';
 
 interface Friend {
   id: string;
@@ -62,6 +69,17 @@ export function Messages() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) return;
+
+      // Try to get friends from cache first
+      const cacheKey = `friends_${user.id}`;
+      const cachedFriends = await getCachedItems(STORES.PROFILES);
+      
+      if (cachedFriends && cachedFriends.length > 0) {
+        console.log('Using cached friends data');
+        setFriends(cachedFriends);
+        setFilteredFriends(cachedFriends);
+        setLoading(false);
+      }
 
       const { data: userProfile } = await supabase
         .from('profiles')
@@ -136,6 +154,9 @@ export function Messages() {
         const timeB = new Date(b.lastMessageTime || 0).getTime();
         return timeB - timeA;
       });
+
+      // Cache the friends data
+      await cacheItems(STORES.PROFILES, formattedFriends);
 
       setFriends(formattedFriends);
       setFilteredFriends(formattedFriends);
@@ -223,6 +244,30 @@ export function Messages() {
         return;
       }
 
+      // Try to get messages from cache first
+      const cacheKey = `messages_${user.id}_${friendId}`;
+      const cachedMessages = await getCachedItems(STORES.MESSAGES);
+      
+      if (cachedMessages && cachedMessages.length > 0) {
+        console.log('Using cached messages data');
+        const filteredMessages = cachedMessages.filter(msg => 
+          (msg.sender_id === user.id && msg.receiver_id === friendId) || 
+          (msg.sender_id === friendId && msg.receiver_id === user.id)
+        );
+        
+        if (filteredMessages.length > 0) {
+          setMessages(filteredMessages);
+          setMessageGroups(groupMessagesByDate(filteredMessages));
+          
+          // Mark messages as read when opening conversation
+          await markMessagesAsRead(friendId);
+          
+          // Only scroll to bottom when initially loading messages
+          setShouldScrollToBottom(true);
+        }
+      }
+
+      // Fetch fresh messages from database
       const { data: messagesData, error } = await supabase
         .from('messages')
         .select(`
@@ -251,6 +296,9 @@ export function Messages() {
           avatar: message.profiles?.avatar || ''
         }
       }));
+
+      // Cache the messages
+      await cacheItems(STORES.MESSAGES, formattedMessages);
 
       setMessages(formattedMessages);
       setMessageGroups(groupMessagesByDate(formattedMessages));
@@ -586,13 +634,16 @@ export function Messages() {
                     placeholder="Search messages..."
                     value={searchQuery}
                     onChange={handleSearch}
-                    className="w-full h-8 font-pixelated text-xs"
+                    className="w-full h-8 font-pixelated text-xs message-search-input"
                   />
                   {searchQuery && (
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => setSearchQuery('')}
+                      onClick={() => {
+                        setSearchQuery('');
+                        setFilteredFriends(friends);
+                      }}
                       className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 hover:bg-muted/50"
                     >
                       <X className="h-3 w-3" />
@@ -604,7 +655,7 @@ export function Messages() {
 
             {/* Friends List - Scrollable with smooth scrolling */}
             <div className="flex-1 overflow-hidden">
-              <ScrollArea className="h-full scroll-smooth" ref={friendsListRef}>
+              <ScrollArea className="h-full scroll-smooth friends-list-scroll" ref={friendsListRef}>
                 {loading ? (
                   <div className="space-y-2 p-3">
                     {[1, 2, 3].map(i => (
@@ -626,9 +677,9 @@ export function Messages() {
                           setSelectedFriend(friend);
                           fetchMessages(friend.id);
                         }}
-                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 relative ${
+                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 relative message-list-item ${
                           selectedFriend?.id === friend.id 
-                            ? 'bg-accent shadow-md' 
+                            ? 'active' 
                             : ''
                         } ${friend.isBlocked ? 'opacity-50' : ''} ${
                           friend.unreadCount && friend.unreadCount > 0 ? 'bg-social-green/5 border-l-4 border-social-green' : ''
@@ -765,7 +816,7 @@ export function Messages() {
                   <div className="flex-1 overflow-hidden">
                     <ScrollArea 
                       ref={messagesContainerRef}
-                      className="h-full scroll-smooth"
+                      className="h-full scroll-smooth messages-scroll-area"
                     >
                       <div className="p-3 space-y-2">
                         {selectedFriend.isBlocked && (
@@ -800,12 +851,10 @@ export function Messages() {
                         {messageGroups.map((group, groupIndex) => (
                           <div key={groupIndex} className="space-y-2">
                             {/* Date Separator */}
-                            <div className="flex items-center justify-center py-1">
-                              <div className="bg-muted px-2 py-1 rounded-full">
-                                <p className="font-pixelated text-xs text-muted-foreground">
-                                  {getDateSeparatorText(group.date)}
-                                </p>
-                              </div>
+                            <div className="message-date-separator">
+                              <span className="font-pixelated text-xs text-muted-foreground bg-background">
+                                {getDateSeparatorText(group.date)}
+                              </span>
                             </div>
                             
                             {/* Messages for this date */}
