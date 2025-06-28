@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
-import { MessageCircle, User, Users, Heart, Facebook, Info } from 'lucide-react';
+import { MessageCircle, User, Users, Heart, Facebook, Info, Zap } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export function Index() {
