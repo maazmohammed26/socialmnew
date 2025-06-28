@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Sparkles, X, Palette, ExternalLink } from 'lucide-react';
+import { Sparkles, X, Palette, ExternalLink, Heart } from 'lucide-react';
 import { useTheme } from '@/hooks/use-theme';
 
 interface SocialChatAnnouncementProps {

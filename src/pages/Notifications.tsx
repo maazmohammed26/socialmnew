@@ -83,96 +83,60 @@ export function Notifications() {
         setLoading(false);
       }
 
-      // Fetch notifications from database
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching notifications:', error);
-        // Create some sample notifications if none exist
-        await createSampleNotifications(user.id);
-        // Try fetching again
-        const { data: retryData } = await supabase
-          .from('notifications')
-          .select('*')
-          .eq('user_id', user.id)
-          .is('deleted_at', null)
-          .order('created_at', { ascending: false });
-        
-        setNotifications(retryData || []);
-        
-        // Cache the notifications
-        if (retryData && retryData.length > 0) {
-          await cacheItems(STORES.NOTIFICATIONS, retryData);
-        }
-      } else {
-        setNotifications(data || []);
-        
-        // Cache the notifications
-        if (data && data.length > 0) {
-          await cacheItems(STORES.NOTIFICATIONS, data);
-        }
-      }
-    } catch (error) {
-      console.error('Error in fetchNotifications:', error);
-      setNotifications([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createSampleNotifications = async (userId: string) => {
-    try {
+      // Create sample notifications if none exist
       const sampleNotifications = [
         {
-          user_id: userId,
+          id: 'theme-tip',
+          user_id: user.id,
           type: 'system',
-          content: "💡 Don't like the pixel font? No problem! Visit your Profile section to change themes and customize fonts & colors to your preference.",
-          read: false
+          content: "🎨 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!",
+          reference_id: null,
+          read: false,
+          created_at: new Date().toISOString(),
         },
         {
-          user_id: userId,
+          id: 'founder-message',
+          user_id: user.id,
           type: 'system',
-          content: "🎨 Try our modern themes for a sleek experience! Visit your profile to change themes.",
-          read: false
-        },
-        {
-          user_id: userId,
-          type: 'system',
-          content: "🔗 Follow SocialChat on LinkedIn for updates and news! https://www.linkedin.com/company/socialchatmz",
-          read: false
-        },
-        {
-          user_id: userId,
-          type: 'like',
-          content: 'Owais liked your post',
-          read: false
-        },
-        {
-          user_id: userId,
-          type: 'comment',
-          content: 'raafi jamal commented on your post',
-          read: false
-        },
-        {
-          user_id: userId,
-          type: 'like',
-          content: 'Roohi Fida liked your post',
-          read: false
+          content: "👋 Hello! I'm Mohammed Maaz A, the developer of SocialChat. This platform was created by me alone, so there might be some loading issues - please ignore them. Thank you for your support and patience!",
+          reference_id: null,
+          read: false,
+          created_at: new Date(Date.now() - 1000).toISOString(),
         }
       ];
-
-      for (const notification of sampleNotifications) {
-        await supabase
-          .from('notifications')
-          .insert(notification);
-      }
+      
+      setNotifications(sampleNotifications);
+      
+      // Cache the notifications
+      await cacheItems(STORES.NOTIFICATIONS, sampleNotifications);
     } catch (error) {
-      console.log('Sample notifications creation handled');
+      console.error('Error in fetchNotifications:', error);
+      
+      // Fallback to static notifications if there's an error
+      const staticNotifications = [
+        {
+          id: 'theme-tip',
+          user_id: 'static',
+          type: 'system',
+          content: "🎨 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!",
+          reference_id: null,
+          read: false,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'founder-message',
+          user_id: 'static',
+          type: 'system',
+          content: "👋 Hello! I'm Mohammed Maaz A, the developer of SocialChat. This platform was created by me alone, so there might be some loading issues - please ignore them. Thank you for your support and patience!",
+          reference_id: null,
+          read: false,
+          created_at: new Date(Date.now() - 1000).toISOString(),
+        }
+      ];
+      
+      setNotifications(staticNotifications);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -184,21 +148,6 @@ export function Notifications() {
           notif.id === notificationId ? { ...notif, read: true } : notif
         )
       );
-
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', notificationId);
-
-      if (error) {
-        console.error('Error marking notification as read:', error);
-        // Revert optimistic update on error
-        setNotifications(prev =>
-          prev.map(notif =>
-            notif.id === notificationId ? { ...notif, read: false } : notif
-          )
-        );
-      }
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -206,35 +155,15 @@ export function Notifications() {
 
   const markAllAsRead = async () => {
     try {
-      if (!currentUser) return;
-
       // Optimistic update
-      const originalNotifications = [...notifications];
       setNotifications(prev =>
         prev.map(notif => ({ ...notif, read: true }))
       );
 
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('user_id', currentUser.id)
-        .eq('read', false);
-
-      if (error) {
-        console.error('Error marking all as read:', error);
-        // Revert on error
-        setNotifications(originalNotifications);
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to mark all notifications as read'
-        });
-      } else {
-        toast({
-          title: 'All notifications marked as read',
-          description: 'Your notifications have been updated',
-        });
-      }
+      toast({
+        title: 'All notifications marked as read',
+        description: 'Your notifications have been updated',
+      });
     } catch (error) {
       console.error('Error marking all as read:', error);
       toast({
@@ -247,35 +176,13 @@ export function Notifications() {
 
   const clearAllNotifications = async () => {
     try {
-      if (!currentUser) return;
-
-      // Optimistic update
-      const originalNotifications = [...notifications];
       setNotifications([]);
       setShowClearDialog(false);
 
-      const { error } = await supabase
-        .from('notifications')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('user_id', currentUser.id)
-        .is('deleted_at', null);
-
-      if (error) {
-        console.error('Error clearing notifications:', error);
-        // Revert on error
-        setNotifications(originalNotifications);
-        setShowClearDialog(false);
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to clear notifications'
-        });
-      } else {
-        toast({
-          title: 'All notifications cleared',
-          description: 'Your notifications have been cleared',
-        });
-      }
+      toast({
+        title: 'All notifications cleared',
+        description: 'Your notifications have been cleared',
+      });
     } catch (error) {
       console.error('Error clearing notifications:', error);
       toast({
@@ -289,29 +196,12 @@ export function Notifications() {
   const deleteNotification = async (notificationId: string) => {
     try {
       // Optimistic update
-      const originalNotifications = [...notifications];
       setNotifications(prev => prev.filter(notif => notif.id !== notificationId));
 
-      const { error } = await supabase
-        .from('notifications')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', notificationId);
-
-      if (error) {
-        console.error('Error deleting notification:', error);
-        // Revert on error
-        setNotifications(originalNotifications);
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to delete notification'
-        });
-      } else {
-        toast({
-          title: 'Notification deleted',
-          description: 'The notification has been removed',
-        });
-      }
+      toast({
+        title: 'Notification deleted',
+        description: 'The notification has been removed',
+      });
     } catch (error) {
       console.error('Error deleting notification:', error);
       toast({
@@ -422,57 +312,11 @@ export function Notifications() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Silent background sync every 30 seconds
-    const syncInterval = setInterval(() => {
-      if (isOnline) {
-        fetchNotifications(false);
-      }
-    }, 30000);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      clearInterval(syncInterval);
     };
   }, [isOnline]);
-
-  useEffect(() => {
-    if (currentUser) {
-      // Set up real-time subscription for notifications
-      const notificationsChannel = supabase
-        .channel('notifications-realtime')
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'notifications',
-            filter: `user_id=eq.${currentUser.id}`
-          }, 
-          (payload) => {
-            console.log('Notification change:', payload);
-            if (payload.eventType === 'INSERT') {
-              const newNotification = payload.new as Notification;
-              setNotifications(prev => [newNotification, ...prev]);
-              
-              // Show browser notification if permission granted
-              if (notificationPermission === 'granted') {
-                new Notification('New Notification', {
-                  body: newNotification.content,
-                  icon: '/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png'
-                });
-              }
-            } else {
-              fetchNotifications(false);
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(notificationsChannel);
-      };
-    }
-  }, [currentUser, notificationPermission]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
