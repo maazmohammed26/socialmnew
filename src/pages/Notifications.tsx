@@ -414,9 +414,9 @@ export function Notifications() {
         )}
 
         {/* Content */}
-        <ScrollArea className="h-[calc(100vh-240px)] p-4 scroll-container scroll-smooth">
+        <ScrollArea className="h-[calc(100vh-180px)] p-4 scroll-container scroll-smooth">
           {notifications.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-3 pb-4">
               {notifications.map((notification) => (
                 <Card 
                   key={notification.id} 
@@ -432,7 +432,7 @@ export function Notifications() {
                       <div className="flex-shrink-0 mt-1">
                         {getNotificationIcon(notification.type)}
                       </div>
-                      <div className="flex-1 min-w-0 pr-2">
+                      <div className="flex-1 min-w-0 max-w-[calc(100%-60px)]">
                         <p className={`font-pixelated text-sm leading-relaxed break-words ${
                           !notification.read ? 'font-medium text-foreground' : 'text-muted-foreground'
                         }`}>
