@@ -102,6 +102,15 @@ export function Notifications() {
           reference_id: null,
           read: false,
           created_at: new Date(Date.now() - 1000).toISOString(),
+        },
+        {
+          id: 'linkedin-follow',
+          user_id: user.id,
+          type: 'system',
+          content: "🔗 Follow SocialChat on LinkedIn for updates and news! https://www.linkedin.com/company/socialchatmz",
+          reference_id: null,
+          read: false,
+          created_at: new Date(Date.now() - 2000).toISOString(),
         }
       ];
       
@@ -131,6 +140,15 @@ export function Notifications() {
           reference_id: null,
           read: false,
           created_at: new Date(Date.now() - 1000).toISOString(),
+        },
+        {
+          id: 'linkedin-follow',
+          user_id: 'static',
+          type: 'system',
+          content: "🔗 Follow SocialChat on LinkedIn for updates and news! https://www.linkedin.com/company/socialchatmz",
+          reference_id: null,
+          read: false,
+          created_at: new Date(Date.now() - 2000).toISOString(),
         }
       ];
       
@@ -256,7 +274,7 @@ export function Notifications() {
       case 'comment':
         return 'border-l-social-purple bg-social-purple/5';
       case 'system':
-        return 'border-l-blue-500 bg-blue-50 animate-pulse';
+        return 'border-l-blue-500 bg-blue-50';
       default:
         return 'border-l-muted-foreground bg-muted/5';
     }
@@ -356,7 +374,7 @@ export function Notifications() {
               {unreadCount > 0 && (
                 <Badge 
                   variant="destructive" 
-                  className="absolute -top-2 -right-2 h-5 w-5 p-0 text-xs flex items-center justify-center animate-pulse"
+                  className="absolute -top-2 -right-2 h-5 w-5 p-0 text-xs flex items-center justify-center"
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </Badge>
@@ -448,43 +466,6 @@ export function Notifications() {
             </div>
           </div>
         )}
-
-        {/* Theme Customization Highlight */}
-        <div className="mx-4 mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-l-4 border-blue-400 rounded-lg shadow-sm">
-          <div className="flex items-start gap-3">
-            <Palette className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-pixelated text-sm font-medium text-blue-800">
-                Customize Your Experience
-              </p>
-              <p className="font-pixelated text-xs text-blue-700 mt-1 leading-relaxed">
-                Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!
-              </p>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <Button
-                  onClick={() => window.location.href = '/profile'}
-                  size="sm"
-                  className="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-pixelated text-xs"
-                >
-                  <Sparkles className="h-3 w-3 mr-1" />
-                  Change Theme
-                </Button>
-                <Button
-                  component="a"
-                  href="https://www.linkedin.com/company/socialchatmz"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  size="sm"
-                  variant="outline"
-                  className="mt-2 font-pixelated text-xs"
-                >
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  Follow on LinkedIn
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Content */}
         <ScrollArea className="h-[calc(100vh-240px)] p-4 scroll-container scroll-smooth">

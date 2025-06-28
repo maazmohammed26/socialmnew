@@ -729,7 +729,7 @@ export function Messages() {
                               {friend.unreadCount && friend.unreadCount > 0 ? (
                                 <Badge 
                                   variant="default" 
-                                  className="h-5 w-5 p-0 text-xs flex items-center justify-center bg-social-green text-white animate-pulse"
+                                  className="h-5 w-5 p-0 text-xs flex items-center justify-center bg-social-green text-white"
                                 >
                                   {friend.unreadCount > 9 ? '9+' : friend.unreadCount}
                                 </Badge>
