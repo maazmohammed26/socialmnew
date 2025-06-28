@@ -9,6 +9,7 @@ import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { LoadingIndicator } from '@/components/ui/loading-indicator';
 
 interface Friend {
   id: string;
@@ -51,6 +52,7 @@ export function Messages() {
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const friendsListRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const fetchFriends = async () => {
@@ -540,7 +542,7 @@ export function Messages() {
 
             {/* Friends List - Scrollable with smooth scrolling */}
             <div className="flex-1 overflow-hidden">
-              <ScrollArea className="h-full scroll-smooth">
+              <ScrollArea ref={friendsListRef} className="h-full scroll-smooth">
                 {loading ? (
                   <div className="space-y-2 p-3">
                     {[1, 2, 3].map(i => (
@@ -816,7 +818,11 @@ export function Messages() {
                             disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked}
                             className="bg-primary hover:bg-primary/90 flex-shrink-0 h-[52px] w-12"
                           >
-                            <Send className="h-4 w-4" />
+                            {sendingMessage ? (
+                              <LoadingIndicator size="sm" color="default" />
+                            ) : (
+                              <Send className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                         <p className="text-xs text-muted-foreground font-pixelated">
