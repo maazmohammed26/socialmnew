@@ -12,6 +12,7 @@ import { FirebaseNotificationProvider } from "@/components/notifications/Firebas
 import { useToast } from "@/hooks/use-toast";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { clearExpiredItems } from "@/lib/cache-utils";
+import { OfflineIndicator } from "@/components/ui/offline-indicator";
 
 // Lazy-loaded pages for better performance
 const Index = lazy(() => import("./pages/Index"));
@@ -216,6 +217,7 @@ const App = () => {
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
+              <OfflineIndicator />
             </BrowserRouter>
           </ErrorBoundary>
         </TooltipProvider>

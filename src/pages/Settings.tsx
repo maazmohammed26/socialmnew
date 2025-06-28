@@ -6,12 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { DeleteAccountDialog } from '@/components/user/DeleteAccountDialog';
-import { Bell, Trash2, Settings as SettingsIcon } from 'lucide-react';
+import { Bell, Trash2, Settings as SettingsIcon, WifiOff, Database } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useOfflineMode } from '@/hooks/use-offline-mode';
+import { clearAllCaches } from '@/lib/cache-utils';
 
 export function Settings() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const { online, offlineEnabled, pendingCount, toggleOfflineMode } = useOfflineMode();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -64,6 +67,24 @@ export function Settings() {
     }
   };
 
+  const handleClearCache = async () => {
+    try {
+      await clearAllCaches();
+      
+      toast({
+        title: 'Cache cleared',
+        description: 'Application cache has been cleared successfully'
+      });
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to clear cache'
+      });
+    }
+  };
+
   const handleAccountDeleted = () => {
     navigate('/login');
   };
@@ -104,6 +125,64 @@ export function Settings() {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Offline Mode Section */}
+            <div className="pt-6 border-t space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base flex items-center gap-2">
+                    <WifiOff className="h-4 w-4" />
+                    Offline Mode
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Save messages locally when offline and sync when you reconnect
+                  </p>
+                </div>
+                <Switch
+                  checked={offlineEnabled}
+                  onCheckedChange={toggleOfflineMode}
+                />
+              </div>
+              {offlineEnabled && (
+                <div className="bg-muted p-3 rounded-md">
+                  <div className="flex items-center gap-2">
+                    <WifiOff className="h-4 w-4 text-amber-600" />
+                    <p className="text-sm">
+                      {online 
+                        ? 'Offline mode is enabled. Messages will be saved locally when you go offline.' 
+                        : 'You are currently offline. Your messages will be saved locally and synced when you reconnect.'}
+                    </p>
+                  </div>
+                  {pendingCount > 0 && (
+                    <p className="text-sm text-amber-600 mt-2">
+                      You have {pendingCount} pending message{pendingCount > 1 ? 's' : ''} to sync when you reconnect.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Cache Management Section */}
+            <div className="pt-6 border-t space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base flex items-center gap-2">
+                    <Database className="h-4 w-4" />
+                    Cache Management
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Clear application cache to free up space or fix issues
+                  </p>
+                </div>
+                <Button
+                  onClick={handleClearCache}
+                  variant="outline"
+                  size="sm"
+                >
+                  Clear Cache
+                </Button>
+              </div>
             </div>
 
             {/* Delete Account Section */}

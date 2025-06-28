@@ -111,7 +111,7 @@ export function Index() {
       </section>
       
       {/* Footer */}
-      <footer className="border-t py-4 sm:py-8 bg-background">
+      <footer className="border-t py-4 sm:py-8 bg-background mt-auto">
         <div className="container mx-auto px-3 sm:px-6 text-sm text-muted-foreground text-center">
           <div className="flex flex-col items-center justify-center space-y-2">
             <img src="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" alt="SocialChat Logo" className="h-6 sm:h-8 w-auto mb-2" />
@@ -156,7 +156,7 @@ export function Index() {
 
       {/* About Us Dialog */}
       <Dialog open={showAboutDialog} onOpenChange={setShowAboutDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh]">
+        <DialogContent className="max-w-3xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-pixelated text-xl social-gradient bg-clip-text text-transparent">
               <img src="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" alt="SocialChat Logo" className="h-8 w-auto" />
@@ -164,7 +164,7 @@ export function Index() {
             </DialogTitle>
           </DialogHeader>
           
-          <ScrollArea className="max-h-[calc(90vh-120px)] pr-4">
+          <ScrollArea className="max-h-[calc(80vh-120px)] pr-4">
             <div className="space-y-4 font-pixelated">
               <div>
                 <h3 className="text-lg font-medium mb-2">Our Story</h3>

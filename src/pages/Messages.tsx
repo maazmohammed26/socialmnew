@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Send, MessageSquare, User, ArrowLeft, UserX, Circle, Heart, X } from 'lucide-react';
+import { Send, MessageSquare, User, ArrowLeft, UserX, Circle, Heart, X, WifiOff } from 'lucide-react';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -17,6 +17,12 @@ import {
   STORES,
   CACHE_EXPIRATION
 } from '@/lib/cache-utils';
+import { useOfflineMode } from '@/hooks/use-offline-mode';
+import { 
+  saveOfflineMessage, 
+  getOfflineMessages,
+  isOnline
+} from '@/lib/offline-storage';
 
 interface Friend {
   id: string;
@@ -40,6 +46,7 @@ interface Message {
     name: string;
     avatar: string;
   };
+  status?: 'pending' | 'synced' | 'failed';
 }
 
 interface MessageGroup {
@@ -63,6 +70,7 @@ export function Messages() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const friendsListRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { online, offlineEnabled, pendingCount, saveMessageOffline } = useOfflineMode();
 
   const fetchFriends = async () => {
     try {
@@ -93,6 +101,11 @@ export function Messages() {
           name: userProfile.name || 'User',
           avatar: userProfile.avatar || ''
         });
+      }
+
+      if (!online) {
+        // If offline, just use cached data
+        return;
       }
 
       const { data: friendsData, error } = await supabase
@@ -171,6 +184,11 @@ export function Messages() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return false;
+
+      if (!online) {
+        // If offline, assume still friends
+        return true;
+      }
 
       const { data: friendship } = await supabase
         .from('friends')
@@ -267,47 +285,67 @@ export function Messages() {
         }
       }
 
-      // Fetch fresh messages from database
-      const { data: messagesData, error } = await supabase
-        .from('messages')
-        .select(`
-          id,
-          sender_id,
-          receiver_id,
-          content,
-          created_at,
-          read,
-          profiles!messages_sender_id_fkey(name, avatar)
-        `)
-        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
-        .order('created_at');
-        
-      if (error) throw error;
-
-      const formattedMessages: Message[] = messagesData.map((message: any) => ({
-        id: message.id,
-        sender_id: message.sender_id,
-        receiver_id: message.receiver_id,
-        content: message.content,
-        created_at: message.created_at,
-        read: message.read,
-        sender: {
-          name: message.profiles?.name || 'Unknown',
-          avatar: message.profiles?.avatar || ''
+      // If offline, also get any pending messages
+      if (!online && offlineEnabled) {
+        try {
+          const conversationId = [user.id, friendId].sort().join('_');
+          const offlineMessages = await getOfflineMessages(conversationId);
+          
+          if (offlineMessages && offlineMessages.length > 0) {
+            // Combine with existing messages
+            const combinedMessages = [...messages, ...offlineMessages];
+            setMessages(combinedMessages);
+            setMessageGroups(groupMessagesByDate(combinedMessages));
+            setShouldScrollToBottom(true);
+          }
+        } catch (offlineError) {
+          console.error('Error fetching offline messages:', offlineError);
         }
-      }));
+      }
 
-      // Cache the messages
-      await cacheItems(STORES.MESSAGES, formattedMessages);
+      // If online, fetch fresh messages from database
+      if (online) {
+        const { data: messagesData, error } = await supabase
+          .from('messages')
+          .select(`
+            id,
+            sender_id,
+            receiver_id,
+            content,
+            created_at,
+            read,
+            profiles!messages_sender_id_fkey(name, avatar)
+          `)
+          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
+          .order('created_at');
+          
+        if (error) throw error;
 
-      setMessages(formattedMessages);
-      setMessageGroups(groupMessagesByDate(formattedMessages));
-      
-      // Mark messages as read when opening conversation
-      await markMessagesAsRead(friendId);
-      
-      // Only scroll to bottom when initially loading messages
-      setShouldScrollToBottom(true);
+        const formattedMessages: Message[] = messagesData.map((message: any) => ({
+          id: message.id,
+          sender_id: message.sender_id,
+          receiver_id: message.receiver_id,
+          content: message.content,
+          created_at: message.created_at,
+          read: message.read,
+          sender: {
+            name: message.profiles?.name || 'Unknown',
+            avatar: message.profiles?.avatar || ''
+          }
+        }));
+
+        // Cache the messages
+        await cacheItems(STORES.MESSAGES, formattedMessages);
+
+        setMessages(formattedMessages);
+        setMessageGroups(groupMessagesByDate(formattedMessages));
+        
+        // Mark messages as read when opening conversation
+        await markMessagesAsRead(friendId);
+        
+        // Only scroll to bottom when initially loading messages
+        setShouldScrollToBottom(true);
+      }
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
@@ -317,6 +355,21 @@ export function Messages() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      if (!online) {
+        // If offline, just update UI
+        setFriends(prev => 
+          prev.map(f => 
+            f.id === friendId ? { ...f, unreadCount: 0 } : f
+          )
+        );
+        setFilteredFriends(prev => 
+          prev.map(f => 
+            f.id === friendId ? { ...f, unreadCount: 0 } : f
+          )
+        );
+        return;
+      }
 
       // Mark all unread messages from this friend as read
       await supabase
@@ -382,60 +435,105 @@ export function Messages() {
       setSendingMessage(true);
       
       const messageData = {
+        id: `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         sender_id: currentUser.id,
         receiver_id: selectedFriend.id,
         content: newMessage.trim(),
-        read: false
+        read: false,
+        created_at: new Date().toISOString(),
+        sender: {
+          name: currentUser.name,
+          avatar: currentUser.avatar
+        }
       };
 
-      const { data, error } = await supabase
-        .from('messages')
-        .insert(messageData)
-        .select()
-        .single();
+      // If offline, save to IndexedDB
+      if (!online) {
+        if (offlineEnabled) {
+          // Save message to offline storage with conversation ID
+          const conversationId = [currentUser.id, selectedFriend.id].sort().join('_');
+          await saveOfflineMessage({
+            ...messageData,
+            conversationId,
+            timestamp: Date.now(),
+            status: 'pending'
+          });
+          
+          // Update UI optimistically
+          setMessages(prev => [...prev, messageData]);
+          setMessageGroups(groupMessagesByDate([...messages, messageData]));
+          
+          toast({
+            title: 'Message saved offline',
+            description: 'Your message will be sent when you reconnect.',
+            duration: 3000
+          });
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'You are offline',
+            description: 'Enable offline mode in settings to send messages while offline.',
+            duration: 5000
+          });
+          setSendingMessage(false);
+          return;
+        }
+      } else {
+        // Online - send to server
+        const { data, error } = await supabase
+          .from('messages')
+          .insert({
+            sender_id: currentUser.id,
+            receiver_id: selectedFriend.id,
+            content: newMessage.trim(),
+            read: false
+          })
+          .select()
+          .single();
+          
+        if (error) throw error;
         
-      if (error) throw error;
-
+        if (data) {
+          const newMessageWithSender = {
+            ...data,
+            sender: {
+              name: currentUser.name,
+              avatar: currentUser.avatar
+            }
+          };
+          
+          setMessages(prevMessages => {
+            const exists = prevMessages.some(msg => msg.id === data.id);
+            if (exists) return prevMessages;
+            const updatedMessages = [...prevMessages, newMessageWithSender];
+            setMessageGroups(groupMessagesByDate(updatedMessages));
+            return updatedMessages;
+          });
+        }
+      }
+      
       setNewMessage('');
       
-      if (data) {
-        const newMessageWithSender = {
-          ...data,
-          sender: {
-            name: currentUser.name,
-            avatar: currentUser.avatar
-          }
-        };
-        
-        setMessages(prevMessages => {
-          const exists = prevMessages.some(msg => msg.id === data.id);
-          if (exists) return prevMessages;
-          const updatedMessages = [...prevMessages, newMessageWithSender];
-          setMessageGroups(groupMessagesByDate(updatedMessages));
-          return updatedMessages;
-        });
-        
-        // Update friends list with new last message
-        const updatedFriends = friends.map(f => 
-          f.id === selectedFriend.id 
-            ? { 
-                ...f, 
-                lastMessageTime: data.created_at,
-                lastMessageContent: data.content
-              } 
-            : f
-        ).sort((a, b) => {
-          const timeA = new Date(a.lastMessageTime || 0).getTime();
-          const timeB = new Date(b.lastMessageTime || 0).getTime();
-          return timeB - timeA;
-        });
-        
-        setFriends(updatedFriends);
-        setFilteredFriends(updatedFriends);
-        
-        // Only scroll to bottom when sending a new message
-        setShouldScrollToBottom(true);
-      }
+      // Update friends list with new last message
+      const updatedFriends = friends.map(f => 
+        f.id === selectedFriend.id 
+          ? { 
+              ...f, 
+              lastMessageTime: new Date().toISOString(),
+              lastMessageContent: newMessage.trim()
+            } 
+          : f
+      ).sort((a, b) => {
+        const timeA = new Date(a.lastMessageTime || 0).getTime();
+        const timeB = new Date(b.lastMessageTime || 0).getTime();
+        return timeB - timeA;
+      });
+      
+      setFriends(updatedFriends);
+      setFilteredFriends(updatedFriends);
+      
+      // Only scroll to bottom when sending a new message
+      setShouldScrollToBottom(true);
     } catch (error) {
       console.error('Error sending message:', error);
       toast({
@@ -503,114 +601,120 @@ export function Messages() {
     fetchFriends();
     
     const friendsInterval = setInterval(() => {
-      fetchFriends();
+      if (online) {
+        fetchFriends();
+      }
     }, 30000);
 
     return () => clearInterval(friendsInterval);
-  }, []);
+  }, [online]);
 
   useEffect(() => {
     if (selectedFriend && currentUser) {
       fetchMessages(selectedFriend.id);
       
-      const channel = supabase
-        .channel(`messages-${selectedFriend.id}-${currentUser.id}`)
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'messages',
-            filter: `or(and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedFriend.id}),and(sender_id.eq.${selectedFriend.id},receiver_id.eq.${currentUser.id}))`
-          }, 
-          async (payload) => {
-            console.log('Real-time message update:', payload);
-            
-            if (payload.eventType === 'INSERT') {
-              const newMessage = payload.new as Message;
+      if (online) {
+        const channel = supabase
+          .channel(`messages-${selectedFriend.id}-${currentUser.id}`)
+          .on('postgres_changes', 
+            { 
+              event: '*', 
+              schema: 'public', 
+              table: 'messages',
+              filter: `or(and(sender_id.eq.${currentUser.id},receiver_id.eq.${selectedFriend.id}),and(sender_id.eq.${selectedFriend.id},receiver_id.eq.${currentUser.id}))`
+            }, 
+            async (payload) => {
+              console.log('Real-time message update:', payload);
               
-              if (newMessage.sender_id !== currentUser.id) {
-                const { data } = await supabase
-                  .from('profiles')
-                  .select('name, avatar')
-                  .eq('id', newMessage.sender_id)
-                  .single();
-                  
-                if (data) {
-                  setMessages(prevMessages => {
-                    const exists = prevMessages.some(msg => msg.id === newMessage.id);
-                    if (exists) return prevMessages;
+              if (payload.eventType === 'INSERT') {
+                const newMessage = payload.new as Message;
+                
+                if (newMessage.sender_id !== currentUser.id) {
+                  const { data } = await supabase
+                    .from('profiles')
+                    .select('name, avatar')
+                    .eq('id', newMessage.sender_id)
+                    .single();
                     
-                    const messageWithSender = {
-                      ...newMessage,
-                      sender: {
-                        name: data.name || 'Unknown',
-                        avatar: data.avatar || ''
-                      }
-                    };
+                  if (data) {
+                    setMessages(prevMessages => {
+                      const exists = prevMessages.some(msg => msg.id === newMessage.id);
+                      if (exists) return prevMessages;
+                      
+                      const messageWithSender = {
+                        ...newMessage,
+                        sender: {
+                          name: data.name || 'Unknown',
+                          avatar: data.avatar || ''
+                        }
+                      };
+                      
+                      const updated = [...prevMessages, messageWithSender];
+                      setMessageGroups(groupMessagesByDate(updated));
+                      
+                      // Only scroll to bottom for new incoming messages
+                      setShouldScrollToBottom(true);
+                      return updated;
+                    });
                     
-                    const updated = [...prevMessages, messageWithSender];
-                    setMessageGroups(groupMessagesByDate(updated));
-                    
-                    // Only scroll to bottom for new incoming messages
-                    setShouldScrollToBottom(true);
-                    return updated;
-                  });
-                  
-                  // Auto-mark as read since conversation is open
-                  await markMessagesAsRead(selectedFriend.id);
+                    // Auto-mark as read since conversation is open
+                    await markMessagesAsRead(selectedFriend.id);
+                  }
                 }
+              } else if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+                fetchMessages(selectedFriend.id);
               }
-            } else if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
-              fetchMessages(selectedFriend.id);
             }
-          }
-        )
-        .subscribe();
+          )
+          .subscribe();
 
-      // Listen for friend removals in real-time
-      const friendsChannel = supabase
-        .channel(`friends-status-${selectedFriend.id}-${currentUser.id}`)
-        .on('postgres_changes',
-          {
-            event: 'DELETE',
-            schema: 'public',
-            table: 'friends'
-          },
-          (payload) => {
-            console.log('Friend deletion detected:', payload);
-            // Check if this deletion affects current conversation
-            const deletedFriend = payload.old;
-            if ((deletedFriend.sender_id === currentUser.id && deletedFriend.receiver_id === selectedFriend.id) ||
-                (deletedFriend.sender_id === selectedFriend.id && deletedFriend.receiver_id === currentUser.id)) {
-              console.log('Current conversation affected by friend removal');
-              // Mark friend as blocked immediately
-              setSelectedFriend(prev => prev ? { ...prev, isBlocked: true } : null);
-              setFriends(prev => 
-                prev.map(f => 
-                  f.id === selectedFriend.id ? { ...f, isBlocked: true } : f
-                )
-              );
-              setFilteredFriends(prev => 
-                prev.map(f => 
-                  f.id === selectedFriend.id ? { ...f, isBlocked: true } : f
-                )
-              );
+        // Listen for friend removals in real-time
+        const friendsChannel = supabase
+          .channel(`friends-status-${selectedFriend.id}-${currentUser.id}`)
+          .on('postgres_changes',
+            {
+              event: 'DELETE',
+              schema: 'public',
+              table: 'friends'
+            },
+            (payload) => {
+              console.log('Friend deletion detected:', payload);
+              // Check if this deletion affects current conversation
+              const deletedFriend = payload.old;
+              if ((deletedFriend.sender_id === currentUser.id && deletedFriend.receiver_id === selectedFriend.id) ||
+                  (deletedFriend.sender_id === selectedFriend.id && deletedFriend.receiver_id === currentUser.id)) {
+                console.log('Current conversation affected by friend removal');
+                // Mark friend as blocked immediately
+                setSelectedFriend(prev => prev ? { ...prev, isBlocked: true } : null);
+                setFriends(prev => 
+                  prev.map(f => 
+                    f.id === selectedFriend.id ? { ...f, isBlocked: true } : f
+                  )
+                );
+                setFilteredFriends(prev => 
+                  prev.map(f => 
+                    f.id === selectedFriend.id ? { ...f, isBlocked: true } : f
+                  )
+                );
+              }
             }
+          )
+          .subscribe();
+
+        const messageInterval = setInterval(() => {
+          if (online) {
+            fetchMessages(selectedFriend.id);
           }
-        )
-        .subscribe();
+        }, 10000);
 
-      const messageInterval = setInterval(() => {
-        fetchMessages(selectedFriend.id);
-      }, 10000);
-
-      return () => {
-        supabase.removeChannel(channel);
-        supabase.removeChannel(friendsChannel);
-        clearInterval(messageInterval);
-      };
+        return () => {
+          supabase.removeChannel(channel);
+          supabase.removeChannel(friendsChannel);
+          clearInterval(messageInterval);
+        };
+      }
     }
-  }, [selectedFriend, currentUser]);
+  }, [selectedFriend, currentUser, online]);
 
   // Only scroll when shouldScrollToBottom is true
   useEffect(() => {
@@ -652,6 +756,20 @@ export function Messages() {
                 </div>
               </div>
             </div>
+
+            {/* Offline Mode Banner */}
+            {!online && (
+              <div className="bg-amber-50 border-b border-amber-200 p-2">
+                <div className="flex items-center gap-2">
+                  <WifiOff className="h-4 w-4 text-amber-500" />
+                  <p className="font-pixelated text-xs text-amber-700">
+                    {offlineEnabled 
+                      ? 'Offline mode: Messages will be sent when you reconnect' 
+                      : 'You are offline. Some features may not work.'}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Friends List - Scrollable with smooth scrolling */}
             <div className="flex-1 overflow-hidden">
@@ -803,10 +921,18 @@ export function Messages() {
                           • No longer friends
                         </span>
                       )}
+                      {!online && (
+                        <span className="ml-2 text-amber-500 font-pixelated">
+                          • Offline Mode
+                        </span>
+                      )}
                     </p>
                   </div>
                   {selectedFriend.isBlocked && (
                     <UserX className="h-4 w-4 text-destructive flex-shrink-0" />
+                  )}
+                  {!online && (
+                    <WifiOff className="h-4 w-4 text-amber-500 flex-shrink-0" />
                   )}
                 </div>
 
@@ -828,6 +954,20 @@ export function Messages() {
                               </p>
                               <p className="font-pixelated text-xs text-muted-foreground mt-1">
                                 You cannot send or receive messages from this user
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {!online && !offlineEnabled && (
+                          <div className="text-center py-4">
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-md mx-auto">
+                              <WifiOff className="h-6 w-6 text-amber-500 mx-auto mb-2" />
+                              <p className="font-pixelated text-xs text-amber-700 font-medium">
+                                You are offline
+                              </p>
+                              <p className="font-pixelated text-xs text-amber-600 mt-1">
+                                Enable offline mode in settings to send messages while offline
                               </p>
                             </div>
                           </div>
@@ -890,7 +1030,9 @@ export function Messages() {
                                       {/* Read Status for sent messages */}
                                       {message.sender_id === currentUser?.id && (
                                         <div className="ml-2">
-                                          {message.read ? (
+                                          {message.status === 'pending' ? (
+                                            <Circle className="h-2 w-2 text-amber-500" />
+                                          ) : message.read ? (
                                             <div className="flex">
                                               <Circle className="h-2 w-2 fill-social-green text-social-green" />
                                               <Circle className="h-2 w-2 fill-social-green text-social-green -ml-1" />
@@ -934,11 +1076,11 @@ export function Messages() {
                               }
                             }}
                             className="min-h-[52px] max-h-[120px] resize-none flex-1 font-pixelated text-xs"
-                            disabled={sendingMessage || selectedFriend.isBlocked}
+                            disabled={sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
                           />
                           <Button
                             onClick={sendMessage}
-                            disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked}
+                            disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
                             className="bg-primary hover:bg-primary/90 flex-shrink-0 h-[52px] w-12"
                           >
                             <Send className="h-4 w-4" />
@@ -946,6 +1088,9 @@ export function Messages() {
                         </div>
                         <p className="text-xs text-muted-foreground font-pixelated">
                           Press Enter to send, Shift + Enter for new line
+                          {!online && offlineEnabled && (
+                            <span className="ml-2 text-amber-500">• Offline mode enabled</span>
+                          )}
                         </p>
                       </div>
                     )}
@@ -959,6 +1104,18 @@ export function Messages() {
                 <p className="text-muted-foreground font-pixelated text-sm">
                   Select a conversation to start messaging
                 </p>
+                {!online && (
+                  <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-md">
+                    <div className="flex items-center gap-2">
+                      <WifiOff className="h-4 w-4 text-amber-500" />
+                      <p className="font-pixelated text-xs text-amber-700">
+                        {offlineEnabled 
+                          ? 'Offline mode is enabled. Your messages will be saved locally.' 
+                          : 'You are offline. Some features may not work.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
