@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { MessageCircle, User, Users, Heart, Facebook, Info, Zap } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function Index() {
   const [showAboutDialog, setShowAboutDialog] = useState(false);
@@ -155,7 +156,7 @@ export function Index() {
 
       {/* About Us Dialog */}
       <Dialog open={showAboutDialog} onOpenChange={setShowAboutDialog}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 font-pixelated text-xl social-gradient bg-clip-text text-transparent">
               <img src="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" alt="SocialChat Logo" className="h-8 w-auto" />
@@ -163,110 +164,112 @@ export function Index() {
             </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4 font-pixelated">
-            <div>
-              <h3 className="text-lg font-medium mb-2">Our Story</h3>
-              <p className="text-sm text-muted-foreground">
-                SocialChat (also known as SocialChat Site) was created in 2025 by Mohammed Maaz A as a personal project to build a modern, user-friendly social messaging platform. Developed entirely by a single developer, SocialChat aims to provide a seamless experience for connecting with friends, sharing moments, and engaging in meaningful conversations.
-              </p>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-medium mb-2">Features</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-muted/30 p-3 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <MessageCircle className="h-4 w-4 text-social-green" />
-                    <h4 className="font-medium text-sm">Real-time Messaging</h4>
+          <ScrollArea className="max-h-[calc(90vh-120px)] pr-4">
+            <div className="space-y-4 font-pixelated">
+              <div>
+                <h3 className="text-lg font-medium mb-2">Our Story</h3>
+                <p className="text-sm text-muted-foreground">
+                  SocialChat (also known as SocialChat Site) was created in 2025 by Mohammed Maaz A as a personal project to build a modern, user-friendly social messaging platform. Developed entirely by a single developer, SocialChat aims to provide a seamless experience for connecting with friends, sharing moments, and engaging in meaningful conversations.
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-medium mb-2">Features</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-muted/30 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <MessageCircle className="h-4 w-4 text-social-green" />
+                      <h4 className="font-medium text-sm">Real-time Messaging</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Connect with friends through instant messaging with real-time updates.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Connect with friends through instant messaging with real-time updates.
-                  </p>
-                </div>
-                
-                <div className="bg-muted/30 p-3 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Heart className="h-4 w-4 text-social-magenta" />
-                    <h4 className="font-medium text-sm">Social Feed</h4>
+                  
+                  <div className="bg-muted/30 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Heart className="h-4 w-4 text-social-magenta" />
+                      <h4 className="font-medium text-sm">Social Feed</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Share posts, photos, and updates with your network.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Share posts, photos, and updates with your network.
-                  </p>
-                </div>
-                
-                <div className="bg-muted/30 p-3 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Users className="h-4 w-4 text-social-blue" />
-                    <h4 className="font-medium text-sm">Friend Networks</h4>
+                  
+                  <div className="bg-muted/30 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Users className="h-4 w-4 text-social-blue" />
+                      <h4 className="font-medium text-sm">Friend Networks</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Build your personal network and connect with friends.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Build your personal network and connect with friends.
-                  </p>
-                </div>
-                
-                <div className="bg-muted/30 p-3 rounded-lg">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Zap className="h-4 w-4 text-social-purple" />
-                    <h4 className="font-medium text-sm">Group Chats</h4>
+                  
+                  <div className="bg-muted/30 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Zap className="h-4 w-4 text-social-purple" />
+                      <h4 className="font-medium text-sm">Group Chats</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Create private groups to chat with multiple friends (coming soon).
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Create private groups to chat with multiple friends (coming soon).
-                  </p>
                 </div>
               </div>
-            </div>
-            
-            <div>
-              <h3 className="text-lg font-medium mb-2">Technology</h3>
-              <p className="text-sm text-muted-foreground">
-                SocialChat is built using modern web technologies to ensure a fast, responsive, and reliable experience:
-              </p>
-              <ul className="list-disc list-inside text-xs text-muted-foreground mt-2 space-y-1">
-                <li>React for the frontend user interface</li>
-                <li>TypeScript for type-safe code</li>
-                <li>Supabase for backend database and authentication</li>
-                <li>Tailwind CSS and shadcn/ui for styling</li>
-                <li>Real-time updates using WebSockets</li>
-              </ul>
-            </div>
-            
-            <div className="bg-muted/30 p-4 rounded-lg">
-              <h3 className="text-lg font-medium mb-2">Contact</h3>
-              <p className="text-sm text-muted-foreground">
-                For support, feedback, or inquiries, please contact:
-              </p>
-              <p className="text-sm font-medium mt-2">
-                Email: <a href="mailto:support@socialchat.site" className="text-social-green hover:underline">support@socialchat.site</a>
-              </p>
-              <div className="flex items-center gap-4 mt-3">
-                <a 
-                  href="https://www.linkedin.com/company/socialchatmz" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-social-blue hover:text-social-light-green transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-                    <path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path>
-                  </svg>
-                </a>
-                <a 
-                  href="https://www.facebook.com/people/SocialChat/61577763366327/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:text-blue-800 transition-colors"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-                    <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z"></path>
-                  </svg>
-                </a>
+              
+              <div>
+                <h3 className="text-lg font-medium mb-2">Technology</h3>
+                <p className="text-sm text-muted-foreground">
+                  SocialChat is built using modern web technologies to ensure a fast, responsive, and reliable experience:
+                </p>
+                <ul className="list-disc list-inside text-xs text-muted-foreground mt-2 space-y-1">
+                  <li>React for the frontend user interface</li>
+                  <li>TypeScript for type-safe code</li>
+                  <li>Supabase for backend database and authentication</li>
+                  <li>Tailwind CSS and shadcn/ui for styling</li>
+                  <li>Real-time updates using WebSockets</li>
+                </ul>
+              </div>
+              
+              <div className="bg-muted/30 p-4 rounded-lg">
+                <h3 className="text-lg font-medium mb-2">Contact</h3>
+                <p className="text-sm text-muted-foreground">
+                  For support, feedback, or inquiries, please contact:
+                </p>
+                <p className="text-sm font-medium mt-2">
+                  Email: <a href="mailto:support@socialchat.site" className="text-social-green hover:underline">support@socialchat.site</a>
+                </p>
+                <div className="flex items-center gap-4 mt-3">
+                  <a 
+                    href="https://www.linkedin.com/company/socialchatmz" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-social-blue hover:text-social-light-green transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+                      <path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"></path>
+                    </svg>
+                  </a>
+                  <a 
+                    href="https://www.facebook.com/people/SocialChat/61577763366327/" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+                      <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c5.05-.5 9-4.76 9-9.95z"></path>
+                    </svg>
+                  </a>
+                </div>
+              </div>
+              
+              <div className="text-center text-xs text-muted-foreground mt-4 pt-4 border-t">
+                <p>© 2025 SocialChat. All rights reserved.</p>
+                <p>Developed by Mohammed Maaz A</p>
               </div>
             </div>
-            
-            <div className="text-center text-xs text-muted-foreground mt-4 pt-4 border-t">
-              <p>© 2025 SocialChat. All rights reserved.</p>
-              <p>Developed by Mohammed Maaz A</p>
-            </div>
-          </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
     </div>
