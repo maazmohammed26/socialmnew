@@ -4,7 +4,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Send, MessageSquare, User, ArrowLeft, UserX, Circle, Heart } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Send, MessageSquare, User, ArrowLeft, UserX, Circle, Heart, Search } from 'lucide-react';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -41,6 +42,7 @@ interface MessageGroup {
 
 export function Messages() {
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [filteredFriends, setFilteredFriends] = useState<Friend[]>([]);
   const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageGroups, setMessageGroups] = useState<MessageGroup[]>([]);
@@ -49,8 +51,10 @@ export function Messages() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar: string } | null>(null);
   const [shouldScrollToBottom, setShouldScrollToBottom] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const friendsListRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const fetchFriends = async () => {
@@ -134,6 +138,7 @@ export function Messages() {
       });
 
       setFriends(formattedFriends);
+      setFilteredFriends(formattedFriends);
     } catch (error) {
       console.error('Error fetching friends for messages:', error);
     } finally {
@@ -201,6 +206,11 @@ export function Messages() {
         console.log('No longer friends, marking as blocked');
         // Update friend status to blocked
         setFriends(prev => 
+          prev.map(f => 
+            f.id === friendId ? { ...f, isBlocked: true } : f
+          )
+        );
+        setFilteredFriends(prev => 
           prev.map(f => 
             f.id === friendId ? { ...f, isBlocked: true } : f
           )
@@ -274,6 +284,11 @@ export function Messages() {
           f.id === friendId ? { ...f, unreadCount: 0 } : f
         )
       );
+      setFilteredFriends(prev => 
+        prev.map(f => 
+          f.id === friendId ? { ...f, unreadCount: 0 } : f
+        )
+      );
     } catch (error) {
       console.error('Error marking messages as read:', error);
     }
@@ -298,6 +313,11 @@ export function Messages() {
       console.log('Friendship ended, blocking chat');
       setSelectedFriend(prev => prev ? { ...prev, isBlocked: true } : null);
       setFriends(prev => 
+        prev.map(f => 
+          f.id === selectedFriend.id ? { ...f, isBlocked: true } : f
+        )
+      );
+      setFilteredFriends(prev => 
         prev.map(f => 
           f.id === selectedFriend.id ? { ...f, isBlocked: true } : f
         )
@@ -348,21 +368,22 @@ export function Messages() {
         });
         
         // Update friends list with new last message
-        setFriends(prev => 
-          prev.map(f => 
-            f.id === selectedFriend.id 
-              ? { 
-                  ...f, 
-                  lastMessageTime: data.created_at,
-                  lastMessageContent: data.content
-                } 
-              : f
-          ).sort((a, b) => {
-            const timeA = new Date(a.lastMessageTime || 0).getTime();
-            const timeB = new Date(b.lastMessageTime || 0).getTime();
-            return timeB - timeA;
-          })
-        );
+        const updatedFriends = friends.map(f => 
+          f.id === selectedFriend.id 
+            ? { 
+                ...f, 
+                lastMessageTime: data.created_at,
+                lastMessageContent: data.content
+              } 
+            : f
+        ).sort((a, b) => {
+          const timeA = new Date(a.lastMessageTime || 0).getTime();
+          const timeB = new Date(b.lastMessageTime || 0).getTime();
+          return timeB - timeA;
+        });
+        
+        setFriends(updatedFriends);
+        setFilteredFriends(updatedFriends);
         
         // Only scroll to bottom when sending a new message
         setShouldScrollToBottom(true);
@@ -410,6 +431,24 @@ export function Messages() {
   const truncateMessage = (message: string, maxLength: number = 30) => {
     if (message.length <= maxLength) return message;
     return message.substring(0, maxLength) + '...';
+  };
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value.toLowerCase();
+    setSearchQuery(query);
+    
+    if (!query.trim()) {
+      setFilteredFriends(friends);
+      return;
+    }
+    
+    const filtered = friends.filter(friend => 
+      friend.name.toLowerCase().includes(query) || 
+      friend.username.toLowerCase().includes(query) ||
+      (friend.lastMessageContent && friend.lastMessageContent.toLowerCase().includes(query))
+    );
+    
+    setFilteredFriends(filtered);
   };
 
   useEffect(() => {
@@ -503,6 +542,11 @@ export function Messages() {
                   f.id === selectedFriend.id ? { ...f, isBlocked: true } : f
                 )
               );
+              setFilteredFriends(prev => 
+                prev.map(f => 
+                  f.id === selectedFriend.id ? { ...f, isBlocked: true } : f
+                )
+              );
             }
           }
         )
@@ -533,14 +577,25 @@ export function Messages() {
         <div className="flex h-full">
           {/* Friends List */}
           <div className={`w-full md:w-80 border-r flex flex-col ${selectedFriend ? 'hidden md:flex' : ''}`}>
-            {/* Friends List Header */}
+            {/* Friends List Header with Search */}
             <div className="p-3 border-b bg-muted/30 flex-shrink-0">
-              <h2 className="font-pixelated text-sm font-medium">Messages</h2>
+              <div className="flex flex-col gap-2">
+                <h2 className="font-pixelated text-sm font-medium">Messages</h2>
+                <div className="relative">
+                  <Input
+                    placeholder="Search messages..."
+                    value={searchQuery}
+                    onChange={handleSearch}
+                    className="w-full h-8 pl-8 font-pixelated text-xs"
+                  />
+                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
             </div>
 
             {/* Friends List - Scrollable with smooth scrolling */}
             <div className="flex-1 overflow-hidden">
-              <ScrollArea className="h-full scroll-smooth">
+              <ScrollArea className="h-full scroll-smooth" ref={friendsListRef}>
                 {loading ? (
                   <div className="space-y-2 p-3">
                     {[1, 2, 3].map(i => (
@@ -553,9 +608,9 @@ export function Messages() {
                       </div>
                     ))}
                   </div>
-                ) : friends.length > 0 ? (
+                ) : filteredFriends.length > 0 ? (
                   <div className="p-2">
-                    {friends.map(friend => (
+                    {filteredFriends.map(friend => (
                       <div
                         key={friend.id}
                         onClick={() => {
@@ -633,11 +688,23 @@ export function Messages() {
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                    <User className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground mb-4 font-pixelated text-sm">No friends yet</p>
-                    <Button variant="outline" asChild className="font-pixelated text-xs">
-                      <a href="/friends">Find Friends</a>
-                    </Button>
+                    {searchQuery ? (
+                      <>
+                        <Search className="h-12 w-12 text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground mb-4 font-pixelated text-sm">No friends match your search</p>
+                        <Button variant="outline" onClick={() => setSearchQuery('')} className="font-pixelated text-xs">
+                          Clear Search
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <User className="h-12 w-12 text-muted-foreground mb-4" />
+                        <p className="text-muted-foreground mb-4 font-pixelated text-sm">No friends yet</p>
+                        <Button variant="outline" asChild className="font-pixelated text-xs">
+                          <a href="/friends">Find Friends</a>
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )}
               </ScrollArea>
