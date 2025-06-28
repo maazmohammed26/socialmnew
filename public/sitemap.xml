@@ -7,41 +7,72 @@
   <!-- Homepage -->
   <url>
     <loc>https://socialchat.site/</loc>
-    <lastmod>2025-01-24</lastmod>
+    <lastmod>2025-06-28</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
 
-  <!-- Public pages that should be indexed -->
+  <!-- Main Pages -->
   <url>
     <loc>https://socialchat.site/login</loc>
-    <lastmod>2025-01-24</lastmod>
+    <lastmod>2025-06-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
   <url>
     <loc>https://socialchat.site/register</loc>
-    <lastmod>2025-01-24</lastmod>
+    <lastmod>2025-06-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
 
-  <!-- Privacy Policy and Terms (if you add them later) -->
-  <!-- 
   <url>
-    <loc>https://socialchat.site/privacy</loc>
-    <lastmod>2025-01-24</lastmod>
-    <changefreq>monthly</changefreq>
+    <loc>https://socialchat.site/dashboard</loc>
+    <lastmod>2025-06-28</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <url>
+    <loc>https://socialchat.site/friends</loc>
+    <lastmod>2025-06-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://socialchat.site/messages</loc>
+    <lastmod>2025-06-28</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://socialchat.site/vortex</loc>
+    <lastmod>2025-06-28</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://socialchat.site/notifications</loc>
+    <lastmod>2025-06-28</lastmod>
+    <changefreq>daily</changefreq>
     <priority>0.6</priority>
   </url>
 
   <url>
-    <loc>https://socialchat.site/terms</loc>
-    <lastmod>2025-01-24</lastmod>
-    <changefreq>monthly</changefreq>
+    <loc>https://socialchat.site/profile</loc>
+    <lastmod>2025-06-28</lastmod>
+    <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
-  -->
 
+  <url>
+    <loc>https://socialchat.site/settings</loc>
+    <lastmod>2025-06-28</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
 </urlset>
