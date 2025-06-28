@@ -357,21 +357,21 @@ export function Notifications() {
                 {unreadCount > 0 && (
                   <Button
                     onClick={markAllAsRead}
-                    size="sm"
-                    className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs h-8"
+                    size="icon"
+                    className="bg-social-green hover:bg-social-light-green text-white h-8 w-8"
+                    title="Mark All Read"
                   >
-                    <CheckCheck className="h-3 w-3 mr-1" />
-                    <span className="whitespace-nowrap">Mark All Read</span>
+                    <CheckCheck className="h-4 w-4" />
                   </Button>
                 )}
                 <Button
                   onClick={() => setShowClearDialog(true)}
-                  size="sm"
+                  size="icon"
                   variant="destructive"
-                  className="font-pixelated text-xs h-8"
+                  className="h-8 w-8"
+                  title="Clear All"
                 >
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  <span className="whitespace-nowrap">Clear All</span>
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             )}
