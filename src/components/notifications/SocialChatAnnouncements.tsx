@@ -33,7 +33,7 @@ export function SocialChatAnnouncement({ onDismiss }: SocialChatAnnouncementProp
   if (!announcement) return null;
 
   return (
-    <Card className="mb-4 border-l-4 border-l-social-green animate-fade-in">
+    <Card className="mb-4 border-l-4 border-l-social-green">
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0 mt-0.5">
@@ -62,18 +62,6 @@ export function SocialChatAnnouncement({ onDismiss }: SocialChatAnnouncementProp
               >
                 <Palette className="h-3 w-3 mr-1" />
                 Change Theme
-              </Button>
-              <Button
-                component="a"
-                href="https://www.linkedin.com/company/socialchatmz"
-                target="_blank"
-                rel="noopener noreferrer"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 font-pixelated text-xs"
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Follow on LinkedIn
               </Button>
             </div>
           </div>

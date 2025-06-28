@@ -24,8 +24,7 @@ import {
   UserX,
   Settings,
   Palette,
-  Sparkles,
-  ExternalLink
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -102,15 +101,6 @@ export function Notifications() {
           reference_id: null,
           read: false,
           created_at: new Date(Date.now() - 1000).toISOString(),
-        },
-        {
-          id: 'linkedin-follow',
-          user_id: user.id,
-          type: 'system',
-          content: "🔗 Follow SocialChat on LinkedIn for updates and news! https://www.linkedin.com/company/socialchatmz",
-          reference_id: null,
-          read: false,
-          created_at: new Date(Date.now() - 2000).toISOString(),
         }
       ];
       
@@ -140,15 +130,6 @@ export function Notifications() {
           reference_id: null,
           read: false,
           created_at: new Date(Date.now() - 1000).toISOString(),
-        },
-        {
-          id: 'linkedin-follow',
-          user_id: 'static',
-          type: 'system',
-          content: "🔗 Follow SocialChat on LinkedIn for updates and news! https://www.linkedin.com/company/socialchatmz",
-          reference_id: null,
-          read: false,
-          created_at: new Date(Date.now() - 2000).toISOString(),
         }
       ];
       
@@ -280,41 +261,6 @@ export function Notifications() {
     }
   };
 
-  // Format notification content to make links clickable
-  const formatNotificationContent = (content: string) => {
-    // Check if content contains a URL
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    if (urlRegex.test(content)) {
-      const parts = content.split(urlRegex);
-      const matches = content.match(urlRegex) || [];
-      
-      return (
-        <>
-          {parts.map((part, i) => {
-            // If this is an odd index and we have a match, it's a URL
-            if (i % 2 === 1 && matches[Math.floor(i/2)]) {
-              return (
-                <a 
-                  key={i} 
-                  href={matches[Math.floor(i/2)]} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-social-blue hover:underline inline-flex items-center gap-0.5"
-                >
-                  {matches[Math.floor(i/2)]}
-                  <ExternalLink className="h-2.5 w-2.5 inline-block" />
-                </a>
-              );
-            }
-            return part;
-          })}
-        </>
-      );
-    }
-    
-    return content;
-  };
-
   useEffect(() => {
     fetchNotifications();
     
@@ -365,7 +311,7 @@ export function Notifications() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto relative h-[calc(100vh-60px)] animate-fade-in">
+      <div className="max-w-2xl mx-auto relative h-[calc(100vh-60px)]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-background sticky top-0 z-10 backdrop-blur-sm">
           <div className="flex items-center gap-3">
@@ -402,7 +348,7 @@ export function Notifications() {
               onClick={() => setShowInfo(true)}
               size="icon"
               variant="outline"
-              className="h-8 w-8 rounded-full hover-scale"
+              className="h-8 w-8 rounded-full"
             >
               <Info className="h-4 w-4" />
             </Button>
@@ -413,7 +359,7 @@ export function Notifications() {
                   <Button
                     onClick={markAllAsRead}
                     size="sm"
-                    className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs h-8 hover-scale"
+                    className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs h-8"
                   >
                     <CheckCheck className="h-3 w-3 mr-1" />
                     Mark All Read
@@ -423,7 +369,7 @@ export function Notifications() {
                   onClick={() => setShowClearDialog(true)}
                   size="sm"
                   variant="destructive"
-                  className="font-pixelated text-xs h-8 hover-scale"
+                  className="font-pixelated text-xs h-8"
                 >
                   <Trash2 className="h-3 w-3 mr-1" />
                   Clear All
@@ -474,7 +420,7 @@ export function Notifications() {
               {notifications.map((notification) => (
                 <Card 
                   key={notification.id} 
-                  className={`cursor-pointer transition-all duration-200 hover:shadow-md hover-scale border-l-4 ${
+                  className={`cursor-pointer transition-all duration-200 hover:shadow-md border-l-4 ${
                     !notification.read 
                       ? `${getNotificationColor(notification.type)} shadow-sm` 
                       : 'border-l-muted bg-background'
@@ -486,11 +432,11 @@ export function Notifications() {
                       <div className="flex-shrink-0 mt-1">
                         {getNotificationIcon(notification.type)}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`font-pixelated text-sm leading-relaxed ${
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className={`font-pixelated text-sm leading-relaxed break-words ${
                           !notification.read ? 'font-medium text-foreground' : 'text-muted-foreground'
                         }`}>
-                          {formatNotificationContent(notification.content)}
+                          {notification.content}
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                           <p className="font-pixelated text-xs text-muted-foreground">
@@ -503,7 +449,7 @@ export function Notifications() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-shrink-0">
                         {!notification.read && (
                           <Button
                             onClick={(e) => {
@@ -560,7 +506,7 @@ export function Notifications() {
 
         {/* Info Dialog */}
         <Dialog open={showInfo} onOpenChange={setShowInfo}>
-          <DialogContent className="max-w-md mx-auto animate-in zoom-in-95 duration-200">
+          <DialogContent className="max-w-md mx-auto">
             <DialogHeader>
               <DialogTitle className="font-pixelated text-lg social-gradient bg-clip-text text-transparent flex items-center gap-2">
                 <Bell className="h-5 w-5" />
@@ -597,22 +543,6 @@ export function Notifications() {
                     <p className="font-pixelated text-xs text-muted-foreground">Change fonts, colors, and visual style in Profile</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 p-3 bg-purple-50 rounded-lg">
-                  <ExternalLink className="h-4 w-4 text-purple-500" />
-                  <div>
-                    <p className="font-pixelated text-xs font-medium">SocialChat Updates</p>
-                    <p className="font-pixelated text-xs text-muted-foreground">
-                      Follow us on <a 
-                        href="https://www.linkedin.com/company/socialchatmz" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-purple-500 hover:underline"
-                      >
-                        LinkedIn
-                      </a> for the latest news
-                    </p>
-                  </div>
-                </div>
               </div>
               
               <div className="bg-muted/50 p-3 rounded-lg">
@@ -623,7 +553,7 @@ export function Notifications() {
               
               <Button 
                 onClick={() => setShowInfo(false)}
-                className="w-full bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs hover-scale"
+                className="w-full bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs"
               >
                 Got it!
               </Button>
@@ -633,7 +563,7 @@ export function Notifications() {
 
         {/* Clear All Confirmation Dialog */}
         <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
-          <AlertDialogContent className="max-w-md mx-auto animate-in zoom-in-95 duration-200">
+          <AlertDialogContent className="max-w-md mx-auto">
             <AlertDialogHeader>
               <AlertDialogTitle className="font-pixelated text-sm flex items-center gap-2">
                 <Trash2 className="h-4 w-4 text-destructive" />
