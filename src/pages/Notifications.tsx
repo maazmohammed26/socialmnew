@@ -23,7 +23,6 @@ import {
   WifiOff,
   UserX,
   Settings,
-  Palette,
   Sparkles
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -354,7 +353,7 @@ export function Notifications() {
             </Button>
             
             {notifications.length > 0 && (
-              <>
+              <div className="flex gap-2">
                 {unreadCount > 0 && (
                   <Button
                     onClick={markAllAsRead}
@@ -362,7 +361,7 @@ export function Notifications() {
                     className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs h-8"
                   >
                     <CheckCheck className="h-3 w-3 mr-1" />
-                    Mark All Read
+                    <span className="whitespace-nowrap">Mark All Read</span>
                   </Button>
                 )}
                 <Button
@@ -372,9 +371,9 @@ export function Notifications() {
                   className="font-pixelated text-xs h-8"
                 >
                   <Trash2 className="h-3 w-3 mr-1" />
-                  Clear All
+                  <span className="whitespace-nowrap">Clear All</span>
                 </Button>
-              </>
+              </div>
             )}
           </div>
         </div>
