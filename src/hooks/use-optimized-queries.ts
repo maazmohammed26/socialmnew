@@ -8,14 +8,63 @@ export function useOptimizedQueries() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data, error } = await supabase.rpc('get_user_feed', {
-        user_uuid: user.id,
-        feed_limit: limit,
-        feed_offset: offset
-      });
+      // First check local cache
+      const cacheKey = `feed_cache_${user.id}_${limit}_${offset}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+      
+      // Use cache if it's less than 5 minutes old
+      if (cachedData && cacheTime) {
+        const now = Date.now();
+        const cacheAge = now - parseInt(cacheTime);
+        if (cacheAge < 5 * 60 * 1000) { // 5 minutes
+          return JSON.parse(cachedData);
+        }
+      }
+
+      // If no valid cache, fetch from database
+      const { data, error } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          content,
+          image_url,
+          created_at,
+          updated_at,
+          user_id,
+          profiles:user_id (
+            name,
+            username,
+            avatar
+          ),
+          likes:likes(id, user_id),
+          comments:comments(
+            id,
+            content,
+            created_at,
+            user_id,
+            profiles:user_id(name, avatar)
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
 
       if (error) throw error;
-      return data || [];
+
+      // Process data to add counts
+      const processedData = data.map(post => ({
+        ...post,
+        _count: {
+          likes: post.likes?.length || 0,
+          comments: post.comments?.length || 0
+        }
+      }));
+
+      // Cache the results
+      localStorage.setItem(cacheKey, JSON.stringify(processedData));
+      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+
+      return processedData;
     } catch (error) {
       console.error('Error fetching optimized feed:', error);
       return [];
@@ -28,13 +77,45 @@ export function useOptimizedQueries() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 
-      const { data, error } = await supabase.rpc('toggle_post_like', {
-        post_uuid: postId,
-        user_uuid: user.id
-      });
+      // Check if post is already liked
+      const { data: existingLike } = await supabase
+        .from('likes')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('user_id', user.id)
+        .single();
 
-      if (error) throw error;
-      return data?.[0] || null;
+      let result;
+      
+      if (existingLike) {
+        // Unlike
+        const { error } = await supabase
+          .from('likes')
+          .delete()
+          .eq('id', existingLike.id);
+
+        if (error) throw error;
+        result = { liked: false };
+      } else {
+        // Like
+        const { data, error } = await supabase
+          .from('likes')
+          .insert({
+            post_id: postId,
+            user_id: user.id
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        result = { liked: true, data };
+      }
+
+      // Invalidate feed cache
+      const cacheKeys = Object.keys(localStorage).filter(key => key.startsWith('feed_cache_'));
+      cacheKeys.forEach(key => localStorage.removeItem(key));
+
+      return result;
     } catch (error) {
       console.error('Error toggling like:', error);
       return null;
@@ -47,12 +128,33 @@ export function useOptimizedQueries() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data, error } = await supabase.rpc('get_friend_suggestions', {
-        user_uuid: user.id,
-        suggestion_limit: limit
-      });
+      // Check cache first
+      const cacheKey = `friend_suggestions_${user.id}_${limit}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+      
+      // Use cache if it's less than 30 minutes old
+      if (cachedData && cacheTime) {
+        const now = Date.now();
+        const cacheAge = now - parseInt(cacheTime);
+        if (cacheAge < 30 * 60 * 1000) { // 30 minutes
+          return JSON.parse(cachedData);
+        }
+      }
+
+      // If no valid cache, fetch from database
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, username, avatar')
+        .neq('id', user.id)
+        .limit(limit);
 
       if (error) throw error;
+
+      // Cache the results
+      localStorage.setItem(cacheKey, JSON.stringify(data));
+      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+
       return data || [];
     } catch (error) {
       console.error('Error fetching friend suggestions:', error);
@@ -63,9 +165,10 @@ export function useOptimizedQueries() {
   // Batch notification creation
   const createNotificationsBatch = useCallback(async (notifications: any[]) => {
     try {
-      const { error } = await supabase.rpc('create_notification_batch', {
-        notifications_data: notifications
-      });
+      // Insert all notifications in one batch
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notifications);
 
       if (error) throw error;
       return true;
@@ -78,6 +181,24 @@ export function useOptimizedQueries() {
   // Optimized story fetching with view tracking
   const fetchStoriesOptimized = useCallback(async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      // Check cache first
+      const cacheKey = `stories_cache_${user.id}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+      
+      // Use cache if it's less than 5 minutes old
+      if (cachedData && cacheTime) {
+        const now = Date.now();
+        const cacheAge = now - parseInt(cacheTime);
+        if (cacheAge < 5 * 60 * 1000) { // 5 minutes
+          return JSON.parse(cachedData);
+        }
+      }
+
+      // If no valid cache, fetch from database
       const { data, error } = await supabase
         .from('stories')
         .select(`
@@ -98,7 +219,25 @@ export function useOptimizedQueries() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data || [];
+
+      // Get viewed stories
+      const { data: viewedStories } = await supabase
+        .from('story_views')
+        .select('story_id')
+        .eq('viewer_id', user.id);
+
+      // Mark stories as viewed
+      const viewedStoryIds = new Set(viewedStories?.map(v => v.story_id) || []);
+      const processedData = data?.map(story => ({
+        ...story,
+        viewed_by_current_user: viewedStoryIds.has(story.id)
+      })) || [];
+
+      // Cache the results
+      localStorage.setItem(cacheKey, JSON.stringify(processedData));
+      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+
+      return processedData;
     } catch (error) {
       console.error('Error fetching optimized stories:', error);
       return [];
@@ -111,6 +250,21 @@ export function useOptimizedQueries() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
+      // Check cache first
+      const cacheKey = `messages_cache_${user.id}_${friendId}_${limit}_${offset}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+      
+      // Use cache if it's less than 1 minute old
+      if (cachedData && cacheTime) {
+        const now = Date.now();
+        const cacheAge = now - parseInt(cacheTime);
+        if (cacheAge < 60 * 1000) { // 1 minute
+          return JSON.parse(cachedData);
+        }
+      }
+
+      // If no valid cache, fetch from database
       const { data, error } = await supabase
         .from('messages')
         .select(`
@@ -128,11 +282,77 @@ export function useOptimizedQueries() {
         .range(offset, offset + limit - 1);
 
       if (error) throw error;
-      return (data || []).reverse(); // Reverse to show oldest first
+      
+      const messages = (data || []).reverse(); // Reverse to show oldest first
+
+      // Cache the results
+      localStorage.setItem(cacheKey, JSON.stringify(messages));
+      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+
+      return messages;
     } catch (error) {
       console.error('Error fetching optimized messages:', error);
       return [];
     }
+  }, []);
+
+  // Optimized group fetching
+  const fetchGroupsOptimized = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      // Check cache first
+      const cacheKey = `groups_cache_${user.id}`;
+      const cachedData = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+      
+      // Use cache if it's less than 5 minutes old
+      if (cachedData && cacheTime) {
+        const now = Date.now();
+        const cacheAge = now - parseInt(cacheTime);
+        if (cacheAge < 5 * 60 * 1000) { // 5 minutes
+          return JSON.parse(cachedData);
+        }
+      }
+
+      // If no valid cache, fetch from database
+      const { data, error } = await supabase
+        .from('groups')
+        .select(`
+          id,
+          name,
+          description,
+          avatar,
+          is_private,
+          created_by,
+          created_at,
+          updated_at,
+          member_count
+        `)
+        .eq('created_by', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Cache the results
+      localStorage.setItem(cacheKey, JSON.stringify(data || []));
+      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching optimized groups:', error);
+      return [];
+    }
+  }, []);
+
+  // Clear all caches
+  const clearAllCaches = useCallback(() => {
+    const cacheKeys = Object.keys(localStorage).filter(key => 
+      key.includes('_cache_') || key.includes('_time')
+    );
+    
+    cacheKeys.forEach(key => localStorage.removeItem(key));
   }, []);
 
   return {
@@ -141,6 +361,8 @@ export function useOptimizedQueries() {
     getFriendSuggestions,
     createNotificationsBatch,
     fetchStoriesOptimized,
-    fetchMessagesOptimized
+    fetchMessagesOptimized,
+    fetchGroupsOptimized,
+    clearAllCaches
   };
 }
