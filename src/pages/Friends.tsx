@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Users, UserPlus, UserCheck, MessageCircle, UserMinus, Clock, X, AlertTriangle } from 'lucide-react';
+import { Users, UserPlus, UserCheck, MessageCircle, UserMinus, Clock, X, AlertTriangle, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -22,6 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { GradientText, GlowEffect } from '@/components/ui/crimson-effects';
+import { CrimsonSearchInput } from '@/components/ui/crimson-input';
 
 interface Friend {
   id: string;
@@ -35,18 +37,57 @@ interface Friend {
   receiver_id?: string;
 }
 
+interface SearchResult {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string | null;
+  created_at: string;
+  isFriend: boolean;
+  isPending: boolean;
+}
+
 export function Friends() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<Friend[]>([]);
   const [suggested, setSuggested] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showRemoveDialog, setShowRemoveDialog] = useState<{show: boolean, friend: Friend | null}>({show: false, friend: null});
   const [removingFriend, setRemovingFriend] = useState<string | null>(null);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('friends');
   const { toast } = useToast();
   const navigate = useNavigate();
+  
+  // Check if we're in crimson theme
+  const [isCrimson, setIsCrimson] = useState(false);
+  
+  useEffect(() => {
+    // Safely check for crimson theme
+    const checkTheme = () => {
+      if (typeof document !== 'undefined') {
+        setIsCrimson(document.documentElement.classList.contains('crimson'));
+      }
+    };
+    
+    // Check initially
+    checkTheme();
+    
+    // Set up observer to detect theme changes
+    const observer = new MutationObserver(checkTheme);
+    if (typeof document !== 'undefined') {
+      observer.observe(document.documentElement, { 
+        attributes: true, 
+        attributeFilter: ['class'] 
+      });
+    }
+    
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     fetchCurrentUser();
@@ -222,6 +263,64 @@ export function Friends() {
     }
   };
 
+  const searchUsers = async (query: string) => {
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setIsSearching(true);
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, username, avatar, created_at')
+        .or(`name.ilike.%${query}%,username.ilike.%${query}%`)
+        .neq('id', currentUser?.id)
+        .limit(10);
+
+      if (error) throw error;
+
+      // Check if each user is already a friend or has a pending request
+      const results = await Promise.all(
+        (data || []).map(async (user) => {
+          // Check if already friends
+          const { data: friendData } = await supabase
+            .from('friends')
+            .select('id')
+            .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${user.id}),and(sender_id.eq.${user.id},receiver_id.eq.${currentUser.id})`)
+            .eq('status', 'accepted')
+            .maybeSingle();
+
+          // Check if pending request exists
+          const { data: pendingData } = await supabase
+            .from('friends')
+            .select('id')
+            .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${user.id}),and(sender_id.eq.${user.id},receiver_id.eq.${currentUser.id})`)
+            .eq('status', 'pending')
+            .maybeSingle();
+
+          return {
+            ...user,
+            isFriend: !!friendData,
+            isPending: !!pendingData
+          };
+        })
+      );
+
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Error searching users:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Search failed',
+        description: 'Failed to search for users',
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const sendFriendRequest = async (userId: string) => {
     try {
       if (!currentUser) return;
@@ -247,6 +346,15 @@ export function Friends() {
       } else {
         // Remove from suggested list
         setSuggested(prev => prev.filter(user => user.id !== userId));
+        
+        // Remove from search results or update status
+        setSearchResults(prev => 
+          prev.map(user => 
+            user.id === userId 
+              ? { ...user, isPending: true } 
+              : user
+          )
+        );
 
         toast({
           title: 'Friend request sent!',
@@ -398,15 +506,27 @@ export function Friends() {
     );
   };
 
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    
+    if (query.length >= 2) {
+      searchUsers(query);
+      setActiveTab('search');
+    } else {
+      setSearchResults([]);
+    }
+  };
+
   const UserCard = ({ user, type }: { user: Friend; type: 'friend' | 'request' | 'suggested' }) => (
-    <Card className="hover:shadow-md transition-all duration-200 hover-scale">
+    <Card className={`hover:shadow-md transition-all duration-200 hover-scale ${isCrimson ? 'border-red-100' : ''}`}>
       <CardContent className="p-3">
         <div className="flex items-center gap-3">
-          <Avatar className="w-12 h-12 border-2 border-social-green">
+          <Avatar className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'}`}>
             {user.avatar ? (
               <AvatarImage src={user.avatar} alt={user.name} />
             ) : (
-              <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-sm">
+              <AvatarFallback className={`${isCrimson ? 'bg-red-600' : 'bg-social-dark-green'} text-white font-pixelated text-sm`}>
                 {user.name.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             )}
@@ -427,7 +547,7 @@ export function Friends() {
                 <Button
                   onClick={() => openChat(user.id)}
                   size="sm"
-                  className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs h-6"
+                  className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs h-6`}
                 >
                   <MessageCircle className="h-3 w-3 mr-1" />
                   Chat
@@ -450,7 +570,7 @@ export function Friends() {
                   onClick={() => acceptFriendRequest(user)}
                   size="sm"
                   disabled={processingRequest === user.id}
-                  className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs h-6"
+                  className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs h-6`}
                 >
                   <UserCheck className="h-3 w-3 mr-1" />
                   {processingRequest === user.id ? 'Processing...' : 'Accept'}
@@ -472,7 +592,76 @@ export function Friends() {
               <Button
                 onClick={() => sendFriendRequest(user.id)}
                 size="sm"
-                className="bg-social-blue hover:bg-social-blue/90 text-white font-pixelated text-xs h-6"
+                className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-blue hover:bg-social-blue/90'} text-white font-pixelated text-xs h-6`}
+              >
+                <UserPlus className="h-3 w-3 mr-1" />
+                Add Friend
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const SearchResultCard = ({ user }: { user: SearchResult }) => (
+    <Card className={`hover:shadow-md transition-all duration-200 hover-scale ${isCrimson ? 'border-red-100' : ''}`}>
+      <CardContent className="p-3">
+        <div className="flex items-center gap-3">
+          <Avatar className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'}`}>
+            {user.avatar ? (
+              <AvatarImage src={user.avatar} alt={user.name} />
+            ) : (
+              <AvatarFallback className={`${isCrimson ? 'bg-red-600' : 'bg-social-dark-green'} text-white font-pixelated text-sm`}>
+                {user.name.substring(0, 2).toUpperCase()}
+              </AvatarFallback>
+            )}
+          </Avatar>
+          
+          <div className="flex-1 min-w-0">
+            <h3 className="font-pixelated text-sm font-medium truncate">{user.name}</h3>
+            <p className="font-pixelated text-xs text-muted-foreground truncate">@{user.username}</p>
+            <p className="font-pixelated text-xs text-muted-foreground">
+              Joined {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            {user.isFriend ? (
+              <>
+                <Button
+                  onClick={() => openChat(user.id)}
+                  size="sm"
+                  className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs h-6`}
+                >
+                  <MessageCircle className="h-3 w-3 mr-1" />
+                  Chat
+                </Button>
+                <Button
+                  onClick={handleRemoveFriendClick}
+                  size="sm"
+                  variant="outline"
+                  className="font-pixelated text-xs h-6 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50"
+                >
+                  <UserMinus className="h-3 w-3 mr-1" />
+                  Remove
+                </Button>
+              </>
+            ) : user.isPending ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                className="font-pixelated text-xs h-6"
+              >
+                <Clock className="h-3 w-3 mr-1" />
+                Pending
+              </Button>
+            ) : (
+              <Button
+                onClick={() => sendFriendRequest(user.id)}
+                size="sm"
+                className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-blue hover:bg-social-blue/90'} text-white font-pixelated text-xs h-6`}
               >
                 <UserPlus className="h-3 w-3 mr-1" />
                 Add Friend
@@ -512,29 +701,47 @@ export function Friends() {
     <DashboardLayout>
       <div className="max-w-4xl mx-auto relative h-[calc(100vh-60px)] animate-fade-in">
         {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b bg-background sticky top-0 z-10 backdrop-blur-sm">
+        <div className={`flex items-center justify-between p-3 border-b bg-background sticky top-0 z-10 backdrop-blur-sm ${isCrimson ? 'border-red-100' : ''}`}>
           <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-primary" />
-            <h1 className="font-pixelated text-base">Friends</h1>
+            <Users className={`h-5 w-5 ${isCrimson ? 'text-red-600' : 'text-primary'}`} />
+            <h1 className="font-pixelated text-base">
+              {isCrimson ? (
+                <GradientText gradientColors={['#dc2626', '#b91c1c']}>Friends</GradientText>
+              ) : (
+                'Friends'
+              )}
+            </h1>
           </div>
           
           <div className="relative max-w-sm">
-            <Input
-              placeholder="Search friends..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="font-pixelated text-xs h-8"
-            />
+            {isCrimson ? (
+              <CrimsonSearchInput
+                placeholder="Search by name or username..."
+                value={searchQuery}
+                onChange={handleSearch}
+                className="font-pixelated text-xs h-8"
+              />
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or username..."
+                  value={searchQuery}
+                  onChange={handleSearch}
+                  className="font-pixelated text-xs h-8 pl-8"
+                />
+              </div>
+            )}
           </div>
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="friends" className="h-[calc(100vh-120px)]">
-          <TabsList className="grid w-full grid-cols-3 mx-3 mt-3">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-[calc(100vh-120px)]">
+          <TabsList className={`grid w-full grid-cols-4 mx-3 mt-3 ${isCrimson ? 'bg-red-50' : ''}`}>
             <TabsTrigger value="friends" className="font-pixelated text-xs relative">
               Friends
               {friends.length > 0 && (
-                <Badge variant="secondary" className="ml-2 h-4 w-4 p-0 text-xs">
+                <Badge variant="secondary" className={`ml-2 h-4 w-4 p-0 text-xs ${isCrimson ? 'bg-red-100 text-red-700' : ''}`}>
                   {friends.length}
                 </Badge>
               )}
@@ -542,7 +749,7 @@ export function Friends() {
             <TabsTrigger value="requests" className="font-pixelated text-xs relative">
               Requests
               {requests.length > 0 && (
-                <Badge variant="destructive" className="ml-2 h-4 w-4 p-0 text-xs animate-pulse">
+                <Badge variant="destructive" className={`ml-2 h-4 w-4 p-0 text-xs animate-pulse ${isCrimson ? 'bg-red-600' : ''}`}>
                   {requests.length}
                 </Badge>
               )}
@@ -552,6 +759,14 @@ export function Friends() {
               {suggested.length > 0 && (
                 <Badge variant="outline" className="ml-2 h-4 w-4 p-0 text-xs">
                   {suggested.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="search" className="font-pixelated text-xs relative">
+              Search
+              {searchResults.length > 0 && (
+                <Badge variant="outline" className={`ml-2 h-4 w-4 p-0 text-xs ${isCrimson ? 'border-red-200 bg-red-50' : ''}`}>
+                  {searchResults.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -626,6 +841,54 @@ export function Friends() {
                       ? 'Try adjusting your search terms'
                       : 'Check back later for new friend suggestions!'
                     }
+                  </p>
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="search" className="h-[calc(100%-60px)] mt-3">
+            <ScrollArea className="h-full px-3 scroll-container">
+              {isSearching ? (
+                <div className="space-y-3 pb-3">
+                  {[1, 2, 3].map(i => (
+                    <Card key={i} className="animate-pulse">
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-12 w-12 rounded-full bg-muted" />
+                          <div className="flex-1">
+                            <div className="h-4 w-3/4 bg-muted rounded mb-2" />
+                            <div className="h-3 w-1/2 bg-muted rounded" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : searchResults.length > 0 ? (
+                <div className="space-y-3 pb-3">
+                  {searchResults.map((user) => (
+                    <SearchResultCard key={user.id} user={user} />
+                  ))}
+                </div>
+              ) : searchQuery.length >= 2 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                  <Search className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                  <h2 className="font-pixelated text-sm font-medium mb-2">
+                    No users found
+                  </h2>
+                  <p className="font-pixelated text-xs text-muted-foreground max-w-sm leading-relaxed">
+                    Try searching with a different name or username
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                  <Search className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                  <h2 className="font-pixelated text-sm font-medium mb-2">
+                    Search for friends
+                  </h2>
+                  <p className="font-pixelated text-xs text-muted-foreground max-w-sm leading-relaxed">
+                    Enter a name or username to find people
                   </p>
                 </div>
               )}
