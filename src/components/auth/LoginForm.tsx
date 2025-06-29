@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,7 +22,36 @@ export function LoginForm() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  // Check for auth state changes to handle Google redirect
+  useEffect(() => {
+    const checkAuthState = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // User is logged in, redirect to dashboard
+        navigate('/dashboard');
+      }
+    };
+    
+    checkAuthState();
+    
+    // Listen for auth state changes (for Google OAuth redirect)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        toast({
+          title: 'Welcome back!',
+          description: 'You have been successfully logged in.',
+        });
+        navigate('/dashboard');
+      }
+    });
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [navigate, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -25,6 +25,34 @@ export function RegisterForm() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  // Check for auth state changes to handle Google redirect
+  useEffect(() => {
+    const checkAuthState = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // User is logged in, redirect to dashboard
+        navigate('/dashboard');
+      }
+    };
+    
+    checkAuthState();
+    
+    // Listen for auth state changes (for Google OAuth redirect)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        toast({
+          title: 'Welcome to SocialChat!',
+          description: 'Your account has been created successfully.',
+        });
+        navigate('/dashboard');
+      }
+    });
+    
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [navigate, toast]);
+
   // Check username availability and format
   useEffect(() => {
     if (username.length < 3) {
