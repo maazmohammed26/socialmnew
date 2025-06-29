@@ -130,14 +130,14 @@ export function Messages() {
             .single();
           
           if (friendProfile && friendProfile.id) {
-            // Get last message and unread count for this friend
+            // Get last message and unread count for this friend - use maybeSingle() to handle no messages
             const { data: lastMessage } = await supabase
               .from('messages')
               .select('content, created_at, sender_id, read')
               .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
               .order('created_at', { ascending: false })
               .limit(1)
-              .single();
+              .maybeSingle(); // Changed from .single() to .maybeSingle()
 
             // Get unread count (messages sent to current user that are unread)
             const { count: unreadCount } = await supabase
@@ -195,7 +195,7 @@ export function Messages() {
         .select('id')
         .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
         .eq('status', 'accepted')
-        .single();
+        .maybeSingle(); // Changed from .single() to .maybeSingle()
 
       return !!friendship;
     } catch (error) {
