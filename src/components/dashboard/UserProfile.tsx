@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Users, MessageCircle, Bell, Shield, Calendar, Link, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -43,14 +43,6 @@ interface UserProfileData {
   color_theme?: string;
 }
 
-interface UserStats {
-  posts: number;
-  friends: number;
-  likes: number;
-  views: number;
-  comments: number;
-}
-
 interface UserActivity {
   type: 'post' | 'comment' | 'like' | 'friend' | 'profile';
   content: string;
@@ -60,7 +52,7 @@ interface UserActivity {
 
 export default function UserProfile() {
   const [userData, setUserData] = useState<UserProfileData | null>(null);
-  const [stats, setStats] = useState<UserStats>({ posts: 0, friends: 0, likes: 0, views: 0, comments: 0 });
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -72,14 +64,11 @@ export default function UserProfile() {
     location: '',
     website: ''
   });
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
   const [recentActivity, setRecentActivity] = useState<UserActivity[]>([]);
   const [accountCreationDate, setAccountCreationDate] = useState<string>('');
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [userPosts, setUserPosts] = useState<any[]>([]);
-  const [cachedActivity, setCachedActivity] = useState<boolean>(false);
-  const [cachedPosts, setCachedPosts] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -116,36 +105,13 @@ export default function UserProfile() {
 
   const fetchUserProfile = async () => {
     try {
-      setIsLoading(true);
+      setLoading(true);
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) {
-        setIsLoading(false);
+        setLoading(false);
         return;
       }
 
-      // Try to get from local storage first for immediate display
-      const cachedProfile = localStorage.getItem(`profile_${authUser.id}`);
-      if (cachedProfile) {
-        const parsedProfile = JSON.parse(cachedProfile);
-        setUserData(parsedProfile);
-        setEditForm({
-          name: parsedProfile.name || '',
-          username: parsedProfile.username || '',
-          bio: parsedProfile.bio || '',
-          location: parsedProfile.location || '',
-          website: parsedProfile.website || ''
-        });
-        
-        // Format account creation date
-        const creationDate = new Date(parsedProfile.created_at);
-        setAccountCreationDate(creationDate.toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }));
-      }
-
-      // Fetch fresh data from database
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -172,27 +138,7 @@ export default function UserProfile() {
           day: 'numeric'
         }));
         
-        // Cache profile data
-        localStorage.setItem(`profile_${authUser.id}`, JSON.stringify(data));
-        
-        // After profile is loaded, fetch stats, activity and posts
-        fetchUserStats(authUser.id);
-        
-        // Check for cached activity and posts
-        const cachedActivity = localStorage.getItem(`activity_${authUser.id}`);
-        const cachedPosts = localStorage.getItem(`posts_${authUser.id}`);
-        
-        if (cachedActivity) {
-          setRecentActivity(JSON.parse(cachedActivity));
-          setCachedActivity(true);
-        }
-        
-        if (cachedPosts) {
-          setUserPosts(JSON.parse(cachedPosts));
-          setCachedPosts(true);
-        }
-        
-        // Fetch fresh activity and posts
+        // After profile is loaded, fetch activity and posts
         fetchRecentActivity(authUser.id);
         fetchUserPosts(authUser.id);
       }
@@ -204,93 +150,12 @@ export default function UserProfile() {
         description: 'Failed to load profile',
       });
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchUserStats = async (userId: string) => {
-    try {
-      // Try to get from local storage first
-      const cachedStats = localStorage.getItem(`stats_${userId}`);
-      if (cachedStats) {
-        setStats(JSON.parse(cachedStats));
-      }
-
-      // Get posts count
-      const { count: postsCount } = await supabase
-        .from('posts')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-
-      // Get friends count
-      const { count: friendsCount } = await supabase
-        .from('friends')
-        .select('*', { count: 'exact', head: true })
-        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-        .eq('status', 'accepted');
-
-      // Get likes received count
-      const { data: userPosts } = await supabase
-        .from('posts')
-        .select('id')
-        .eq('user_id', userId);
-
-      let likesCount = 0;
-      let commentsCount = 0;
-      let viewsCount = 0;
-      
-      if (userPosts && userPosts.length > 0) {
-        // Get likes count
-        const { count: likes } = await supabase
-          .from('likes')
-          .select('*', { count: 'exact', head: true })
-          .in('post_id', userPosts.map(post => post.id));
-        
-        likesCount = likes || 0;
-        
-        // Get comments count
-        const { count: comments } = await supabase
-          .from('comments')
-          .select('*', { count: 'exact', head: true })
-          .in('post_id', userPosts.map(post => post.id));
-          
-        commentsCount = comments || 0;
-        
-        // Get story views count
-        const { data: stories } = await supabase
-          .from('stories')
-          .select('views_count')
-          .eq('user_id', userId);
-          
-        if (stories && stories.length > 0) {
-          viewsCount = stories.reduce((total, story) => total + (story.views_count || 0), 0);
-        }
-      }
-
-      const newStats = {
-        posts: postsCount || 0,
-        friends: friendsCount || 0,
-        likes: likesCount,
-        comments: commentsCount,
-        views: viewsCount
-      };
-      
-      setStats(newStats);
-      
-      // Cache stats
-      localStorage.setItem(`stats_${userId}`, JSON.stringify(newStats));
-    } catch (error) {
-      console.error('Error fetching user stats:', error);
+      setLoading(false);
     }
   };
   
   const fetchRecentActivity = async (userId: string) => {
     try {
-      // If we already have cached activity, don't block the UI
-      if (!cachedActivity) {
-        setIsLoading(true);
-      }
-      
       // Get recent posts
       const { data: recentPosts } = await supabase
         .from('posts')
@@ -361,26 +226,13 @@ export default function UserProfile() {
       activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       
       setRecentActivity(activities);
-      
-      // Cache activity data
-      localStorage.setItem(`activity_${userId}`, JSON.stringify(activities));
-      setCachedActivity(true);
     } catch (error) {
       console.error('Error fetching recent activity:', error);
-    } finally {
-      if (!cachedActivity) {
-        setIsLoading(false);
-      }
     }
   };
   
   const fetchUserPosts = async (userId: string) => {
     try {
-      // If we already have cached posts, don't block the UI
-      if (!cachedPosts) {
-        setIsLoading(true);
-      }
-      
       const { data, error } = await supabase
         .from('posts')
         .select(`
@@ -397,16 +249,8 @@ export default function UserProfile() {
       if (error) throw error;
       
       setUserPosts(data || []);
-      
-      // Cache posts data
-      localStorage.setItem(`posts_${userId}`, JSON.stringify(data || []));
-      setCachedPosts(true);
     } catch (error) {
       console.error('Error fetching user posts:', error);
-    } finally {
-      if (!cachedPosts) {
-        setIsLoading(false);
-      }
     }
   };
 
@@ -501,7 +345,7 @@ export default function UserProfile() {
     navigate('/dashboard');
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="max-w-2xl mx-auto space-y-4">
         <Card className="animate-pulse">
@@ -607,6 +451,7 @@ export default function UserProfile() {
                     
                     {userData.website && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground font-pixelated">
+                        <Link className="h-3 w-3" />
                         <a 
                           href={userData.website.startsWith('http') ? userData.website : `https://${userData.website}`}
                           target="_blank"
@@ -715,34 +560,6 @@ export default function UserProfile() {
             </CardHeader>
           </Card>
 
-          {/* Stats Card */}
-          <Card className="card-gradient">
-            <CardContent className="p-4">
-              <div className="grid grid-cols-5 gap-2 text-center">
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.posts}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Posts</p>
-                </div>
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.friends}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Friends</p>
-                </div>
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.likes}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Likes</p>
-                </div>
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.comments}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Comments</p>
-                </div>
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.views}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Views</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
           {/* Account Info */}
           <Card className="card-gradient">
             <CardContent className="p-4">

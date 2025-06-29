@@ -5,14 +5,11 @@ import { StoriesContainer } from '@/components/stories/StoriesContainer';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Send, Image as ImageIcon, X, Sparkles, Zap, TrendingUp, Clock } from 'lucide-react';
+import { Send, Image as ImageIcon, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ThemePrompt } from '@/components/dashboard/ThemePrompt';
-import { OfflinePostIndicator } from '@/components/dashboard/OfflinePostIndicator';
-import { useOfflinePosts } from '@/hooks/use-offline-posts';
-import { Badge } from '@/components/ui/badge';
 
 export function Dashboard() {
   const [postContent, setPostContent] = useState('');
@@ -20,14 +17,10 @@ export function Dashboard() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [feedKey, setFeedKey] = useState(0);
-  const [trendingTopics, setTrendingTopics] = useState<string[]>([]);
-  const [recentPosts, setRecentPosts] = useState<number>(0);
-  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const postBoxRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const { getPendingSyncCount } = useOfflinePosts();
 
   // Listen for scroll to top event with improved implementation
   useEffect(() => {
@@ -53,31 +46,6 @@ export function Dashboard() {
       window.removeEventListener('scrollToTop', handleScrollToTop);
       delete (window as any).scrollDashboardToTop;
     };
-  }, []);
-
-  // Generate trending topics
-  useEffect(() => {
-    const topics = ['#SummerVibes', '#TechTalk', '#FoodieLife', '#TravelGoals', '#MondayMotivation'];
-    setTrendingTopics(topics);
-    
-    // Simulate recent post count
-    const getRecentPostCount = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        
-        const { count } = await supabase
-          .from('posts')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-          
-        setRecentPosts(count || 0);
-      } catch (error) {
-        console.error('Error fetching recent post count:', error);
-      }
-    };
-    
-    getRecentPostCount();
   }, []);
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,8 +139,6 @@ export function Dashboard() {
       
       // Force feed refresh by updating key - this will trigger CommunityFeed to re-mount
       setFeedKey(prev => prev + 1);
-      setLastRefreshed(new Date());
-      setRecentPosts(prev => prev + 1);
       
       toast({
         title: 'Success',
@@ -196,17 +162,6 @@ export function Dashboard() {
       handlePost();
     }
   };
-
-  const refreshFeed = () => {
-    setFeedKey(prev => prev + 1);
-    setLastRefreshed(new Date());
-    toast({
-      title: 'Feed refreshed',
-      description: 'Latest posts have been loaded'
-    });
-  };
-
-  const pendingCount = getPendingSyncCount();
 
   return (
     <DashboardLayout>
@@ -271,9 +226,9 @@ export function Dashboard() {
                       <ImageIcon className="h-4 w-4 mr-2" />
                       Add Image
                     </Button>
-                    
-                    {/* Offline indicator */}
-                    <OfflinePostIndicator />
+                    <p className="text-xs text-muted-foreground font-pixelated hidden sm:block">
+                      Press Enter to post
+                    </p>
                   </div>
                   <Button
                     onClick={handlePost}
@@ -289,86 +244,12 @@ export function Dashboard() {
             </CardContent>
           </Card>
           
-          {/* Trending Topics */}
-          <Card className="mb-4 card-gradient animate-fade-in shadow-md">
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-social-purple" />
-                  <h3 className="font-pixelated text-xs font-medium">Trending Topics</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-3 w-3 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground font-pixelated">
-                    Updated {formatTimeAgo(lastRefreshed)}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-2">
-                {trendingTopics.map((topic, index) => (
-                  <Badge 
-                    key={index} 
-                    variant="outline" 
-                    className="font-pixelated text-xs bg-social-purple/10 hover:bg-social-purple/20 cursor-pointer transition-colors"
-                    onClick={() => {
-                      setPostContent(prev => prev + ' ' + topic + ' ');
-                    }}
-                  >
-                    {topic}
-                  </Badge>
-                ))}
-              </div>
-              
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/30">
-                <div className="flex items-center gap-1">
-                  <Zap className="h-3 w-3 text-social-green" />
-                  <span className="text-xs font-pixelated">
-                    {recentPosts} new posts today
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={refreshFeed}
-                  className="h-7 px-2 font-pixelated text-xs"
-                >
-                  <Sparkles className="h-3 w-3 mr-1" />
-                  Refresh
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-          
           {/* Feed with key-based refresh for seamless updates */}
           <CommunityFeed key={feedKey} />
         </ScrollArea>
       </div>
     </DashboardLayout>
   );
-}
-
-// Helper function to format time ago
-function formatTimeAgo(date: Date): string {
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  if (diffInSeconds < 60) {
-    return 'just now';
-  }
-  
-  const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) {
-    return `${diffInMinutes} minute${diffInMinutes !== 1 ? 's' : ''} ago`;
-  }
-  
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) {
-    return `${diffInHours} hour${diffInHours !== 1 ? 's' : ''} ago`;
-  }
-  
-  const diffInDays = Math.floor(diffInHours / 24);
-  return `${diffInDays} day${diffInDays !== 1 ? 's' : ''} ago`;
 }
 
 export default Dashboard;
