@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Users, MessageCircle, Bell, Shield, Calendar, Link, MapPin, ChevronDown, ChevronUp, ArrowUp, Clock, Star, Bookmark, Sparkles } from 'lucide-react';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Users, MessageCircle, Bell, Shield, Calendar, Link, MapPin, ChevronDown, ChevronUp, ArrowUp, Clock, Star, Bookmark, Sparkles, Mail, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -335,6 +335,10 @@ export default function UserProfile() {
   const handlePostClick = (postId: string) => {
     // Navigate to the dashboard instead of a specific post
     navigate('/dashboard');
+  };
+
+  const handleContactSupport = () => {
+    window.location.href = 'mailto:support@socialchat.site';
   };
 
   // Filter activities to show only last week by default
@@ -869,12 +873,46 @@ export default function UserProfile() {
                 </Button>
                 
                 <Button
+                  variant="outline"
+                  className="w-full justify-start font-pixelated text-xs h-8"
+                  onClick={handleContactSupport}
+                >
+                  <Mail className="h-3 w-3 mr-2" />
+                  Contact Support
+                </Button>
+                
+                <Button
                   variant="destructive"
                   className="w-full justify-start font-pixelated text-xs h-8"
                   onClick={() => setShowDeleteDialog(true)}
                 >
                   <Trash2 className="h-3 w-3 mr-2" />
                   Delete Account
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          
+          {/* Support Section */}
+          <Card className="card-gradient">
+            <CardContent className="p-4">
+              <h3 className="font-pixelated text-sm font-medium mb-3 flex items-center gap-2">
+                <HelpCircle className="h-4 w-4" />
+                Support
+              </h3>
+              
+              <div className="bg-muted/30 p-4 rounded-lg">
+                <p className="font-pixelated text-xs text-muted-foreground mb-3">
+                  Need help with your account or have questions about SocialChat? Our support team is here to help!
+                </p>
+                
+                <Button
+                  variant="outline"
+                  className="w-full justify-center font-pixelated text-xs h-8 bg-social-green/10 border-social-green/20 text-social-green hover:bg-social-green hover:text-white"
+                  onClick={handleContactSupport}
+                >
+                  <Mail className="h-3 w-3 mr-2" />
+                  Email support@socialchat.site
                 </Button>
               </div>
             </CardContent>
