@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { clearExpiredItems } from "@/lib/cache-utils";
 import { OfflineIndicator } from "@/components/ui/offline-indicator";
+import { GradientText } from "@/components/ui/crimson-effects";
 
 // Lazy-loaded pages for better performance
 const Index = lazy(() => import("./pages/Index"));
@@ -130,6 +131,9 @@ const App = () => {
   if (loading) {
     return <LoadingScreen />;
   }
+
+  // Check if we're in crimson theme
+  const isCrimson = theme === 'crimson';
 
   return (
     <QueryClientProvider client={queryClient}>

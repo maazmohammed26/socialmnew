@@ -5,9 +5,13 @@ import { MessageCircle, User, Users, Heart, Linkedin, Info, Zap } from 'lucide-r
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Footer } from '@/components/ui/footer';
+import { GradientText } from '@/components/ui/crimson-effects';
 
 export function Index() {
   const [showAboutDialog, setShowAboutDialog] = useState(false);
+  
+  // Check if we're in crimson theme
+  const isCrimson = document.documentElement.classList.contains('crimson');
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -16,7 +20,17 @@ export function Index() {
         <div className="container mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" alt="SocialChat Logo" className="h-6 sm:h-8 w-auto" />
-            <span className="text-lg sm:text-xl font-bold font-pixelated social-gradient bg-clip-text text-transparent">SocialChat</span>
+            {isCrimson ? (
+              <GradientText 
+                gradientColors={['#dc2626', '#b91c1c']} 
+                className="text-lg sm:text-xl font-bold font-pixelated"
+                animated
+              >
+                SocialChat
+              </GradientText>
+            ) : (
+              <span className="text-lg sm:text-xl font-bold font-pixelated social-gradient bg-clip-text text-transparent">SocialChat</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Link to="/login">
@@ -41,10 +55,16 @@ export function Index() {
               <div className="mb-4">
                 <img src="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" alt="SocialChat Logo" className="h-12 sm:h-16 w-auto" />
               </div>
-              <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold leading-tight font-pixelated">
-                Connect. Share. <span className="social-gradient bg-clip-text text-transparent">Engage.</span>
-              </h1>
-              <p className="text-base sm:text-xl text-muted-foreground font-pixelated">
+              {isCrimson ? (
+                <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold leading-tight font-pixelated">
+                  Connect. Share. <GradientText gradientColors={['#dc2626', '#b91c1c']} animated>Engage.</GradientText>
+                </h1>
+              ) : (
+                <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold leading-tight font-pixelated">
+                  Connect. Share. <span className="social-gradient bg-clip-text text-transparent">Engage.</span>
+                </h1>
+              )}
+              <p className="font-pixelated text-base sm:text-xl text-muted-foreground">
                 Join our vibrant social community where you can connect with friends, 
                 share your thoughts, and engage in meaningful conversations.
               </p>
@@ -118,9 +138,15 @@ export function Index() {
       <Dialog open={showAboutDialog} onOpenChange={setShowAboutDialog}>
         <DialogContent className="max-w-3xl max-h-[80vh]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-pixelated text-xl social-gradient bg-clip-text text-transparent">
+            <DialogTitle className="flex items-center gap-2 font-pixelated text-xl">
               <img src="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" alt="SocialChat Logo" className="h-8 w-auto" />
-              About SocialChat
+              {isCrimson ? (
+                <GradientText gradientColors={['#dc2626', '#b91c1c']} animated>
+                  About SocialChat
+                </GradientText>
+              ) : (
+                <span className="social-gradient bg-clip-text text-transparent">About SocialChat</span>
+              )}
             </DialogTitle>
           </DialogHeader>
           

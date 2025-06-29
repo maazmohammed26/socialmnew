@@ -35,6 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { GradientText } from '@/components/ui/crimson-effects';
 
 interface MobileTab {
   path: string;
@@ -47,9 +48,14 @@ export function MobileHeader() {
   const [user, setUser] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const { unreadCount } = useEnhancedNotifications();
+  const [unreadCount, setUnreadCount] = useState(0);
   const { toast } = useToast();
+  const { unreadCount: notificationCount } = useEnhancedNotifications();
   
+  useEffect(() => {
+    setUnreadCount(notificationCount);
+  }, [notificationCount]);
+
   useEffect(() => {
     async function getUserProfile() {
       try {
@@ -160,6 +166,9 @@ export function MobileHeader() {
 
   const isActive = (path: string) => location.pathname === path;
 
+  // Check if we're in crimson theme
+  const isCrimson = document.documentElement.classList.contains('crimson');
+
   return (
     <>
       <header className="fixed top-0 left-0 w-full z-50 bg-background/95 backdrop-blur-sm border-b border-border">
@@ -176,10 +185,10 @@ export function MobileHeader() {
                 <div className="flex items-center justify-center p-4 border-b shrink-0 bg-gradient-to-r from-social-light-green to-social-blue">
                   <img 
                     src="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" 
-                    alt="SocialChat" 
+                    alt="SocialChat Logo" 
                     className="h-8 w-auto mr-2"
                   />
-                  <h2 className="font-pixelated text-lg text-white">
+                  <h2 className="text-2xl font-bold font-pixelated text-white">
                     Menu
                   </h2>
                 </div>
@@ -263,9 +272,19 @@ export function MobileHeader() {
                 alt="SocialChat" 
                 className="h-8 w-auto"
               />
-              <h1 className="font-pixelated text-base">
-                <span className="social-gradient bg-clip-text text-transparent">SocialChat</span>
-              </h1>
+              {isCrimson ? (
+                <GradientText 
+                  gradientColors={['#dc2626', '#b91c1c']} 
+                  className="font-pixelated text-base"
+                  animated
+                >
+                  SocialChat
+                </GradientText>
+              ) : (
+                <h1 className="font-pixelated text-base">
+                  <span className="social-gradient bg-clip-text text-transparent">SocialChat</span>
+                </h1>
+              )}
             </div>
           </div>
           
