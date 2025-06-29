@@ -57,6 +57,17 @@ interface UserActivity {
   timestamp: string;
 }
 
+interface Post {
+  id: string;
+  content: string;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+  likes_count: number;
+  comments_count: number;
+}
+
 export default function UserProfile() {
   const [user, setUser] = useState<UserProfileData | null>(null);
   const [stats, setStats] = useState<UserStats>({ posts: 0, friends: 0, likes: 0, views: 0, comments: 0 });
@@ -76,6 +87,7 @@ export default function UserProfile() {
   const [recentActivity, setRecentActivity] = useState<UserActivity[]>([]);
   const [accountCreationDate, setAccountCreationDate] = useState<string>('');
   const [profileUrl, setProfileUrl] = useState<string>('');
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -110,6 +122,7 @@ export default function UserProfile() {
     fetchUserProfile();
     fetchUserStats();
     fetchRecentActivity();
+    fetchUserPosts();
   }, []);
 
   const fetchUserProfile = async () => {
@@ -303,6 +316,53 @@ export default function UserProfile() {
       setRecentActivity(activities);
     } catch (error) {
       console.error('Error fetching recent activity:', error);
+    }
+  };
+
+  const fetchUserPosts = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+
+      // Get user posts with likes and comments count
+      const { data: posts, error } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          content,
+          image_url,
+          created_at,
+          updated_at,
+          user_id
+        `)
+        .eq('user_id', authUser.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      // Get likes and comments count for each post
+      const postsWithCounts = await Promise.all(posts.map(async (post) => {
+        const { count: likesCount } = await supabase
+          .from('likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('post_id', post.id);
+
+        const { count: commentsCount } = await supabase
+          .from('comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('post_id', post.id);
+
+        return {
+          ...post,
+          likes_count: likesCount || 0,
+          comments_count: commentsCount || 0
+        };
+      }));
+
+      setUserPosts(postsWithCounts);
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
     }
   };
 
@@ -735,46 +795,67 @@ export default function UserProfile() {
             </CardContent>
           </Card>
           
-          {/* Popular Posts */}
+          {/* User Posts */}
           <Card className="card-gradient">
             <CardContent className="p-4">
-              <h3 className="font-pixelated text-sm font-medium mb-3">Popular Posts</h3>
+              <h3 className="font-pixelated text-sm font-medium mb-3">Your Posts</h3>
               
-              <div className="space-y-3">
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <p className="font-pixelated text-xs">
-                    "Just had an amazing day at the beach! 🏖️ #summer #fun"
-                  </p>
-                  <div className="flex items-center gap-4 mt-2">
-                    <div className="flex items-center gap-1">
-                      <Heart className="h-3 w-3 text-social-magenta" />
-                      <span className="text-xs text-muted-foreground font-pixelated">24</span>
+              {userPosts.length > 0 ? (
+                <div className="space-y-3">
+                  {userPosts.map((post) => (
+                    <div key={post.id} className="p-3 bg-muted/30 rounded-lg">
+                      <p className="font-pixelated text-xs">
+                        {post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content}
+                      </p>
+                      {post.image_url && (
+                        <div className="mt-2 mb-2">
+                          <img 
+                            src={post.image_url} 
+                            alt="Post image" 
+                            className="w-full h-32 object-cover rounded-md"
+                          />
+                        </div>
+                      )}
+                      <div className="flex items-center gap-4 mt-2">
+                        <div className="flex items-center gap-1">
+                          <Heart className="h-3 w-3 text-social-magenta" />
+                          <span className="text-xs text-muted-foreground font-pixelated">{post.likes_count}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <MessageCircle className="h-3 w-3 text-social-blue" />
+                          <span className="text-xs text-muted-foreground font-pixelated">{post.comments_count}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-pixelated">
+                          {formatTimeAgo(new Date(post.created_at))}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <MessageCircle className="h-3 w-3 text-social-blue" />
-                      <span className="text-xs text-muted-foreground font-pixelated">8</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground font-pixelated">2 days ago</span>
-                  </div>
+                  ))}
+                  
+                  {userPosts.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full font-pixelated text-xs"
+                      onClick={() => navigate('/dashboard')}
+                    >
+                      View All Posts
+                    </Button>
+                  )}
                 </div>
-                
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <p className="font-pixelated text-xs">
-                    "Check out this amazing sunset view from my window! 🌅 #nofilter"
-                  </p>
-                  <div className="flex items-center gap-4 mt-2">
-                    <div className="flex items-center gap-1">
-                      <Heart className="h-3 w-3 text-social-magenta" />
-                      <span className="text-xs text-muted-foreground font-pixelated">18</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <MessageCircle className="h-3 w-3 text-social-blue" />
-                      <span className="text-xs text-muted-foreground font-pixelated">5</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground font-pixelated">1 week ago</span>
-                  </div>
+              ) : (
+                <div className="text-center py-6">
+                  <p className="font-pixelated text-sm text-muted-foreground">You haven't created any posts yet</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 font-pixelated text-xs"
+                    onClick={() => navigate('/dashboard')}
+                  >
+                    Create Your First Post
+                  </Button>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
           
@@ -794,16 +875,30 @@ export default function UserProfile() {
               </div>
               
               <div className="grid grid-cols-3 gap-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex flex-col items-center gap-1">
-                    <Avatar className="w-16 h-16 border-2 border-social-green/20">
-                      <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-sm">
-                        U{i}
-                      </AvatarFallback>
-                    </Avatar>
-                    <p className="font-pixelated text-xs text-center truncate w-full">User {i}</p>
+                {stats.friends > 0 ? (
+                  Array.from({ length: Math.min(3, stats.friends) }).map((_, i) => (
+                    <div key={i} className="flex flex-col items-center gap-1">
+                      <Avatar className="w-16 h-16 border-2 border-social-green/20">
+                        <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-sm">
+                          F{i+1}
+                        </AvatarFallback>
+                      </Avatar>
+                      <p className="font-pixelated text-xs text-center truncate w-full">Friend {i+1}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-3 text-center py-4">
+                    <p className="font-pixelated text-xs text-muted-foreground">No friends yet</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 font-pixelated text-xs"
+                      onClick={() => navigate('/friends')}
+                    >
+                      Find Friends
+                    </Button>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
