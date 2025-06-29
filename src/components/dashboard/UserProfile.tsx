@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink, MapPin } from 'lucide-react';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -43,6 +43,12 @@ interface UserProfileData {
   color_theme?: string;
 }
 
+interface UserActivity {
+  type: 'post' | 'comment' | 'like' | 'friend' | 'profile';
+  content: string;
+  timestamp: string;
+}
+
 export default function UserProfile() {
   const [user, setUser] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,8 +64,11 @@ export default function UserProfile() {
     website: ''
   });
   const [activeTab, setActiveTab] = useState('profile');
+  const [recentActivity, setRecentActivity] = useState<UserActivity[]>([]);
   const [accountCreationDate, setAccountCreationDate] = useState<string>('');
   const [profileUrl, setProfileUrl] = useState<string>('');
+  const [showAllActivity, setShowAllActivity] = useState(false);
+  const [userPosts, setUserPosts] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -92,6 +101,8 @@ export default function UserProfile() {
 
   useEffect(() => {
     fetchUserProfile();
+    fetchRecentActivity();
+    fetchUserPosts();
   }, []);
 
   const fetchUserProfile = async () => {
@@ -137,6 +148,109 @@ export default function UserProfile() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const fetchRecentActivity = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+      
+      // Get recent posts
+      const { data: recentPosts } = await supabase
+        .from('posts')
+        .select('content, created_at')
+        .eq('user_id', authUser.id)
+        .order('created_at', { ascending: false })
+        .limit(3);
+        
+      // Get recent comments
+      const { data: recentComments } = await supabase
+        .from('comments')
+        .select('content, created_at')
+        .eq('user_id', authUser.id)
+        .order('created_at', { ascending: false })
+        .limit(2);
+        
+      // Get recent friend connections
+      const { data: recentFriends } = await supabase
+        .from('friends')
+        .select(`
+          created_at,
+          profiles:sender_id!inner(name),
+          profiles2:receiver_id!inner(name)
+        `)
+        .or(`sender_id.eq.${authUser.id},receiver_id.eq.${authUser.id}`)
+        .eq('status', 'accepted')
+        .order('created_at', { ascending: false })
+        .limit(2);
+        
+      // Combine and sort activities
+      const activities: UserActivity[] = [];
+      
+      if (recentPosts) {
+        recentPosts.forEach(post => {
+          activities.push({
+            type: 'post',
+            content: post.content.length > 50 ? post.content.substring(0, 50) + '...' : post.content,
+            timestamp: post.created_at
+          });
+        });
+      }
+      
+      if (recentComments) {
+        recentComments.forEach(comment => {
+          activities.push({
+            type: 'comment',
+            content: comment.content.length > 50 ? comment.content.substring(0, 50) + '...' : comment.content,
+            timestamp: comment.created_at
+          });
+        });
+      }
+      
+      if (recentFriends) {
+        recentFriends.forEach(friend => {
+          const friendName = friend.sender_id === authUser.id ? friend.profiles2.name : friend.profiles.name;
+          activities.push({
+            type: 'friend',
+            content: `You became friends with ${friendName}`,
+            timestamp: friend.created_at
+          });
+        });
+      }
+      
+      // Sort by timestamp (newest first)
+      activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      setRecentActivity(activities);
+    } catch (error) {
+      console.error('Error fetching recent activity:', error);
+    }
+  };
+  
+  const fetchUserPosts = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) return;
+      
+      const { data, error } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          content,
+          image_url,
+          created_at,
+          updated_at
+        `)
+        .eq('user_id', authUser.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+        
+      if (error) throw error;
+      
+      setUserPosts(data || []);
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
     }
   };
 
@@ -242,6 +356,11 @@ export default function UserProfile() {
       });
     }
   };
+  
+  const handlePostClick = (postId: string) => {
+    // Navigate to the specific post
+    navigate(`/post/${postId}`);
+  };
 
   if (loading) {
     return (
@@ -264,6 +383,14 @@ export default function UserProfile() {
       </div>
     );
   }
+
+  // Filter activities to show only last week by default
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  
+  const filteredActivity = showAllActivity 
+    ? recentActivity 
+    : recentActivity.filter(activity => new Date(activity.timestamp) > oneWeekAgo);
 
   return (
     <div className="max-w-2xl mx-auto space-y-3 p-3">
@@ -368,24 +495,6 @@ export default function UserProfile() {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="font-pixelated text-xs">Edit your profile information</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            onClick={copyProfileLink}
-                            className="font-pixelated text-xs h-8"
-                          >
-                            <ExternalLink className="h-3 w-3 mr-1" />
-                            Share
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="font-pixelated text-xs">Copy your profile link</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -513,61 +622,107 @@ export default function UserProfile() {
           {/* Recent Activity */}
           <Card className="card-gradient">
             <CardContent className="p-4">
-              <h3 className="font-pixelated text-sm font-medium mb-3">Recent Activity</h3>
-              
-              <div className="space-y-3">
-                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                  <MessageCircle className="h-4 w-4 text-social-green mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-pixelated text-xs">
-                      Posted a new update <span className="text-muted-foreground">2 days ago</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                  <MessageCircle className="h-4 w-4 text-social-blue mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-pixelated text-xs">
-                      Commented on a post <span className="text-muted-foreground">5 days ago</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                  <Users className="h-4 w-4 text-social-purple mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-pixelated text-xs">
-                      Made a new friend <span className="text-muted-foreground">1 week ago</span>
-                    </p>
-                  </div>
-                </div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-pixelated text-sm font-medium">Recent Activity</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllActivity(!showAllActivity)}
+                  className="h-7 px-2 font-pixelated text-xs flex items-center gap-1"
+                >
+                  {showAllActivity ? (
+                    <>
+                      <ChevronUp className="h-3 w-3" />
+                      Show Less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3" />
+                      Show All
+                    </>
+                  )}
+                </Button>
               </div>
+              
+              <ScrollArea className="max-h-60">
+                {filteredActivity.length > 0 ? (
+                  <div className="space-y-3">
+                    {filteredActivity.map((activity, index) => (
+                      <div key={index} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+                        {activity.type === 'post' && <MessageCircle className="h-4 w-4 text-social-green mt-0.5" />}
+                        {activity.type === 'comment' && <MessageCircle className="h-4 w-4 text-social-blue mt-0.5" />}
+                        {activity.type === 'like' && <Heart className="h-4 w-4 text-social-magenta mt-0.5" />}
+                        {activity.type === 'friend' && <Users className="h-4 w-4 text-social-purple mt-0.5" />}
+                        
+                        <div className="flex-1">
+                          <p className="font-pixelated text-xs">{activity.content}</p>
+                          <p className="font-pixelated text-xs text-muted-foreground mt-1">
+                            {formatTimeAgo(new Date(activity.timestamp))}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="font-pixelated text-sm text-muted-foreground">No recent activity to show</p>
+                  </div>
+                )}
+              </ScrollArea>
             </CardContent>
           </Card>
           
-          {/* Popular Posts */}
+          {/* User Posts */}
           <Card className="card-gradient">
             <CardContent className="p-4">
               <h3 className="font-pixelated text-sm font-medium mb-3">Your Posts</h3>
               
-              <div className="space-y-3">
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <p className="font-pixelated text-xs">
-                    "Just had an amazing day at the beach! 🏖️ #summer #fun"
-                  </p>
-                  <div className="flex items-center gap-4 mt-2">
-                    <span className="text-xs text-muted-foreground font-pixelated">2 days ago</span>
+              <ScrollArea className="max-h-80">
+                {userPosts.length > 0 ? (
+                  <div className="space-y-3">
+                    {userPosts.map((post) => (
+                      <div 
+                        key={post.id} 
+                        className="p-3 bg-muted/30 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => handlePostClick(post.id)}
+                      >
+                        <p className="font-pixelated text-xs">
+                          {post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content}
+                        </p>
+                        {post.image_url && (
+                          <div className="mt-2">
+                            <img 
+                              src={post.image_url} 
+                              alt="Post" 
+                              className="w-full h-32 object-cover rounded-md"
+                            />
+                          </div>
+                        )}
+                        <div className="flex items-center gap-4 mt-2">
+                          <span className="text-xs text-muted-foreground font-pixelated">
+                            {formatTimeAgo(new Date(post.created_at))}
+                          </span>
+                          {post.updated_at !== post.created_at && (
+                            <span className="text-xs text-muted-foreground font-pixelated">(edited)</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-                
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <p className="font-pixelated text-xs">
-                    "Check out this amazing sunset view from my window! 🌅 #nofilter"
-                  </p>
-                  <div className="flex items-center gap-4 mt-2">
-                    <span className="text-xs text-muted-foreground font-pixelated">1 week ago</span>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="font-pixelated text-sm text-muted-foreground">You haven't created any posts yet</p>
+                    <Button
+                      onClick={() => navigate('/dashboard')}
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 font-pixelated text-xs"
+                    >
+                      Create Your First Post
+                    </Button>
                   </div>
-                </div>
-              </div>
+                )}
+              </ScrollArea>
             </CardContent>
           </Card>
         </TabsContent>
@@ -701,4 +856,42 @@ export default function UserProfile() {
       />
     </div>
   );
+}
+
+// Helper function to format time ago
+function formatTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) {
+    return 'just now';
+  }
+  
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes} minute${diffInMinutes !== 1 ? 's' : ''} ago`;
+  }
+  
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    return `${diffInHours} hour${diffInHours !== 1 ? 's' : ''} ago`;
+  }
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) {
+    return `${diffInDays} day${diffInDays !== 1 ? 's' : ''} ago`;
+  }
+  
+  const diffInWeeks = Math.floor(diffInDays / 7);
+  if (diffInWeeks < 4) {
+    return `${diffInWeeks} week${diffInWeeks !== 1 ? 's' : ''} ago`;
+  }
+  
+  const diffInMonths = Math.floor(diffInDays / 30);
+  if (diffInMonths < 12) {
+    return `${diffInMonths} month${diffInMonths !== 1 ? 's' : ''} ago`;
+  }
+  
+  const diffInYears = Math.floor(diffInDays / 365);
+  return `${diffInYears} year${diffInYears !== 1 ? 's' : ''} ago`;
 }
