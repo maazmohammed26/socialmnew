@@ -2,12 +2,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { UserPlus, Search, Clock, X } from 'lucide-react';
+import { UserPlus, Search, Clock, X, UserCheck, Filter, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { UserProfileDialog } from '@/components/user/UserProfileDialog';
 import { CrimsonSearchInput } from '@/components/ui/crimson-input';
 import { GlowEffect } from '@/components/ui/crimson-effects';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 
 interface User {
   id: string;
@@ -21,6 +30,7 @@ interface User {
 interface SearchResult extends User {
   isFriend: boolean;
   isPending: boolean;
+  mutualFriends?: number;
 }
 
 export function UserSearch() {
@@ -30,6 +40,7 @@ export function UserSearch() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserDialog, setShowUserDialog] = useState(false);
+  const [searchFilter, setSearchFilter] = useState<'all' | 'new' | 'mutual'>('all');
   const { toast } = useToast();
   
   // Check if we're in crimson theme
@@ -74,8 +85,9 @@ export function UserSearch() {
       return;
     }
 
-    setIsLoading(true);
     try {
+      setIsLoading(true);
+
       const { data, error } = await supabase
         .from('profiles')
         .select('id, name, username, avatar, created_at')
@@ -103,16 +115,31 @@ export function UserSearch() {
             .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${user.id}),and(sender_id.eq.${user.id},receiver_id.eq.${currentUserId})`)
             .eq('status', 'pending')
             .maybeSingle();
+            
+          // Get mutual friends count
+          const { data: mutualData } = await supabase.rpc('get_mutual_friends_count', {
+            user_uuid: currentUserId,
+            friend_uuid: user.id
+          });
 
           return {
             ...user,
             isFriend: !!friendData,
-            isPending: !!pendingData
+            isPending: !!pendingData,
+            mutualFriends: mutualData || 0
           };
         })
       );
+      
+      // Apply filter if needed
+      let filteredResults = results;
+      if (searchFilter === 'new') {
+        filteredResults = results.filter(user => !user.isFriend && !user.isPending);
+      } else if (searchFilter === 'mutual') {
+        filteredResults = results.filter(user => (user.mutualFriends || 0) > 0);
+      }
 
-      setSearchResults(results);
+      setSearchResults(filteredResults);
     } catch (error) {
       console.error('Error searching users:', error);
       toast({
@@ -123,7 +150,7 @@ export function UserSearch() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUserId, toast]);
+  }, [currentUserId, toast, searchFilter]);
 
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
@@ -195,37 +222,76 @@ export function UserSearch() {
   return (
     <>
       <div className="space-y-3">
-        <div className="relative">
-          {isCrimson ? (
-            <CrimsonSearchInput
-              type="text"
-              placeholder="Find Friends"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full font-pixelated text-xs h-8 transition-all duration-200"
-            />
-          ) : (
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            {isCrimson ? (
+              <CrimsonSearchInput
                 type="text"
                 placeholder="Find Friends"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full font-pixelated text-xs h-8 pl-9 pr-9 transition-all duration-200 focus:ring-2 focus:ring-social-green"
+                className="w-full font-pixelated text-xs h-8 transition-all duration-200"
               />
-              {searchTerm && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleClearSearch}
-                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 hover:bg-muted/50"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-          )}
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Find Friends"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full font-pixelated text-xs h-8 pl-9 pr-9 transition-all duration-200 focus:ring-2 focus:ring-social-green"
+                />
+                {searchTerm && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleClearSearch}
+                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 hover:bg-muted/50"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="h-8 w-8"
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel className="font-pixelated text-xs">Filter Results</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => setSearchFilter('all')}
+                className={`font-pixelated text-xs cursor-pointer ${searchFilter === 'all' ? 'bg-muted' : ''}`}
+              >
+                <Users className="h-3 w-3 mr-2" />
+                All Users
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => setSearchFilter('new')}
+                className={`font-pixelated text-xs cursor-pointer ${searchFilter === 'new' ? 'bg-muted' : ''}`}
+              >
+                <UserPlus className="h-3 w-3 mr-2" />
+                New Connections
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => setSearchFilter('mutual')}
+                className={`font-pixelated text-xs cursor-pointer ${searchFilter === 'mutual' ? 'bg-muted' : ''}`}
+              >
+                <Users className="h-3 w-3 mr-2" />
+                With Mutual Friends
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {searchResults.length > 0 && (
@@ -252,9 +318,16 @@ export function UserSearch() {
                     <p className="font-pixelated text-xs font-medium truncate">
                       {user.name}
                     </p>
-                    <p className="font-pixelated text-xs text-muted-foreground truncate">
-                      @{user.username}
-                    </p>
+                    <div className="flex items-center">
+                      <p className="font-pixelated text-xs text-muted-foreground truncate">
+                        @{user.username}
+                      </p>
+                      {user.mutualFriends && user.mutualFriends > 0 && (
+                        <Badge variant="outline" className="ml-2 h-4 px-1 text-[8px] font-pixelated">
+                          {user.mutualFriends} mutual
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {user.isFriend ? (

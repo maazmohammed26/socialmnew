@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,25 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Users, UserPlus, UserCheck, MessageCircle, UserMinus, Clock, X, AlertTriangle, Search } from 'lucide-react';
+import { 
+  Users, 
+  UserPlus, 
+  UserCheck, 
+  MessageCircle, 
+  UserMinus, 
+  Clock, 
+  X, 
+  AlertTriangle, 
+  Search, 
+  Filter, 
+  SortAsc, 
+  SortDesc, 
+  RefreshCw,
+  UserX,
+  Check,
+  Star,
+  Heart
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -24,6 +42,21 @@ import {
 } from "@/components/ui/alert-dialog";
 import { GradientText, GlowEffect } from '@/components/ui/crimson-effects';
 import { CrimsonSearchInput } from '@/components/ui/crimson-input';
+import { UserSearch } from '@/components/dashboard/UserSearch';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UserProfileDialog } from '@/components/user/UserProfileDialog';
 
 interface Friend {
   id: string;
@@ -35,6 +68,8 @@ interface Friend {
   friend_id?: string;
   sender_id?: string;
   receiver_id?: string;
+  last_interaction?: string;
+  favorite?: boolean;
 }
 
 interface SearchResult {
@@ -45,6 +80,7 @@ interface SearchResult {
   created_at: string;
   isFriend: boolean;
   isPending: boolean;
+  mutualFriends?: number;
 }
 
 export function Friends() {
@@ -60,6 +96,12 @@ export function Friends() {
   const [removingFriend, setRemovingFriend] = useState<string | null>(null);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('friends');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<'name' | 'date' | 'activity'>('activity');
+  const [filterFavorites, setFilterFavorites] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [showUserDialog, setShowUserDialog] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -160,11 +202,31 @@ export function Friends() {
 
       console.log('Raw friends data:', data);
 
-      const friendsList = data?.map(friendship => {
+      // Get last interaction data for each friend
+      const friendsList = await Promise.all((data || []).map(async friendship => {
         const isCurrentUserSender = friendship.sender_id === currentUser.id;
         const friendProfile = isCurrentUserSender 
           ? friendship.receiver_profile 
           : friendship.sender_profile;
+        
+        const friendId = friendProfile.id;
+        
+        // Get last message between users
+        const { data: lastMessage } = await supabase
+          .from('messages')
+          .select('created_at')
+          .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        // Check if friend is favorited
+        const { data: favoriteData } = await supabase
+          .from('favorite_friends')
+          .select('id')
+          .eq('user_id', currentUser.id)
+          .eq('friend_id', friendId)
+          .maybeSingle();
         
         return {
           id: friendProfile.id,
@@ -175,9 +237,11 @@ export function Friends() {
           created_at: friendship.created_at,
           friend_id: friendship.id,
           sender_id: friendship.sender_id,
-          receiver_id: friendship.receiver_id
+          receiver_id: friendship.receiver_id,
+          last_interaction: lastMessage?.created_at || friendship.created_at,
+          favorite: !!favoriteData
         };
-      }) || [];
+      }));
 
       console.log('Processed friends list:', friendsList);
       setFriends(friendsList);
@@ -238,6 +302,29 @@ export function Friends() {
       });
       connectedUserIds.add(currentUser.id); // Exclude current user
 
+      // Get users with mutual friends
+      const { data: mutualFriendsData } = await supabase.rpc('get_mutual_friends', {
+        user_uuid: currentUser.id,
+        limit_count: 10
+      });
+
+      if (mutualFriendsData && mutualFriendsData.length > 0) {
+        const suggestedList = mutualFriendsData.map(profile => ({
+          id: profile.id,
+          name: profile.name,
+          username: profile.username,
+          avatar: profile.avatar,
+          status: 'suggested' as const,
+          created_at: profile.created_at,
+          mutualFriends: profile.mutual_friends_count
+        }));
+        
+        setSuggested(suggestedList);
+        setLoading(false);
+        return;
+      }
+
+      // Fallback to regular suggestions if no mutual friends
       const { data, error } = await supabase
         .from('profiles')
         .select('id, name, username, avatar, created_at')
@@ -277,7 +364,7 @@ export function Friends() {
         .select('id, name, username, avatar, created_at')
         .or(`name.ilike.%${query}%,username.ilike.%${query}%`)
         .neq('id', currentUser?.id)
-        .limit(10);
+        .limit(20);
 
       if (error) throw error;
 
@@ -299,11 +386,18 @@ export function Friends() {
             .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${user.id}),and(sender_id.eq.${user.id},receiver_id.eq.${currentUser.id})`)
             .eq('status', 'pending')
             .maybeSingle();
+            
+          // Get mutual friends count
+          const { data: mutualData } = await supabase.rpc('get_mutual_friends_count', {
+            user_uuid: currentUser.id,
+            friend_uuid: user.id
+          });
 
           return {
             ...user,
             isFriend: !!friendData,
-            isPending: !!pendingData
+            isPending: !!pendingData,
+            mutualFriends: mutualData || 0
           };
         })
       );
@@ -485,12 +579,101 @@ export function Friends() {
     }
   };
 
-  const handleRemoveFriendClick = () => {
-    toast({
-      title: 'Coming Soon',
-      description: 'Remove friend feature is coming soon! Stay tuned for updates.',
-      duration: 3000,
-    });
+  const handleRemoveFriend = async (friend: Friend) => {
+    try {
+      if (!friend.friend_id) return;
+      
+      setRemovingFriend(friend.id);
+      
+      const { error } = await supabase
+        .from('friends')
+        .delete()
+        .eq('id', friend.friend_id);
+        
+      if (error) throw error;
+      
+      // Remove from favorites if exists
+      await supabase
+        .from('favorite_friends')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('friend_id', friend.id);
+      
+      // Remove from friends list
+      setFriends(prev => prev.filter(f => f.id !== friend.id));
+      
+      setShowRemoveDialog({show: false, friend: null});
+      
+      toast({
+        title: 'Friend removed',
+        description: `${friend.name} has been removed from your friends list`,
+      });
+    } catch (error) {
+      console.error('Error removing friend:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to remove friend',
+      });
+    } finally {
+      setRemovingFriend(null);
+    }
+  };
+
+  const toggleFavoriteFriend = async (friendId: string, isFavorite: boolean) => {
+    try {
+      if (isFavorite) {
+        // Remove from favorites
+        await supabase
+          .from('favorite_friends')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('friend_id', friendId);
+          
+        // Update local state
+        setFriends(prev => 
+          prev.map(friend => 
+            friend.id === friendId 
+              ? { ...friend, favorite: false } 
+              : friend
+          )
+        );
+        
+        toast({
+          title: 'Removed from favorites',
+          description: 'Friend removed from favorites',
+        });
+      } else {
+        // Add to favorites
+        await supabase
+          .from('favorite_friends')
+          .insert({
+            user_id: currentUser.id,
+            friend_id: friendId
+          });
+          
+        // Update local state
+        setFriends(prev => 
+          prev.map(friend => 
+            friend.id === friendId 
+              ? { ...friend, favorite: true } 
+              : friend
+          )
+        );
+        
+        toast({
+          title: 'Added to favorites',
+          description: 'Friend added to favorites',
+        });
+      }
+    } catch (error) {
+      console.error('Error toggling favorite status:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to update favorite status',
+      });
+    }
   };
 
   const openChat = (userId: string) => {
@@ -498,12 +681,26 @@ export function Friends() {
   };
 
   const filterUsers = (users: Friend[]) => {
-    if (!searchQuery.trim()) return users;
+    if (!searchQuery.trim()) {
+      // Apply favorites filter if enabled
+      if (filterFavorites) {
+        return users.filter(user => user.favorite);
+      }
+      return users;
+    }
+    
     const query = searchQuery.toLowerCase();
-    return users.filter(user => 
+    let filtered = users.filter(user => 
       user.name.toLowerCase().includes(query) ||
       user.username.toLowerCase().includes(query)
     );
+    
+    // Apply favorites filter if enabled
+    if (filterFavorites) {
+      filtered = filtered.filter(user => user.favorite);
+    }
+    
+    return filtered;
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -517,12 +714,64 @@ export function Friends() {
       setSearchResults([]);
     }
   };
+  
+  const sortFriends = (friendsList: Friend[]) => {
+    let sorted = [...friendsList];
+    
+    switch (sortBy) {
+      case 'name':
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case 'date':
+        sorted.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        break;
+      case 'activity':
+        sorted.sort((a, b) => {
+          const dateA = a.last_interaction ? new Date(a.last_interaction).getTime() : new Date(a.created_at).getTime();
+          const dateB = b.last_interaction ? new Date(b.last_interaction).getTime() : new Date(b.created_at).getTime();
+          return dateB - dateA; // Most recent first
+        });
+        break;
+    }
+    
+    // Apply sort order
+    if (sortOrder === 'asc' && sortBy !== 'activity') {
+      return sorted;
+    } else if (sortOrder === 'desc' && sortBy !== 'activity') {
+      return sorted.reverse();
+    }
+    
+    return sorted;
+  };
+  
+  const refreshData = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      fetchFriends(),
+      fetchFriendRequests(),
+      fetchSuggestedFriends()
+    ]);
+    setRefreshing(false);
+    
+    toast({
+      title: 'Refreshed',
+      description: 'Friend data has been refreshed',
+    });
+  };
+  
+  const handleUserClick = (user: any) => {
+    setSelectedUser(user);
+    setShowUserDialog(true);
+  };
 
   const UserCard = ({ user, type }: { user: Friend; type: 'friend' | 'request' | 'suggested' }) => (
     <Card className={`hover:shadow-md transition-all duration-200 hover-scale ${isCrimson ? 'border-red-100' : ''}`}>
       <CardContent className="p-3">
         <div className="flex items-center gap-3">
-          <Avatar className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'}`}>
+          <Avatar 
+            className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'} cursor-pointer`}
+            onClick={() => handleUserClick(user)}
+          >
             {user.avatar ? (
               <AvatarImage src={user.avatar} alt={user.name} />
             ) : (
@@ -532,12 +781,31 @@ export function Friends() {
             )}
           </Avatar>
           
-          <div className="flex-1 min-w-0">
-            <h3 className="font-pixelated text-sm font-medium truncate">{user.name}</h3>
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleUserClick(user)}>
+            <div className="flex items-center gap-2">
+              <h3 className="font-pixelated text-sm font-medium truncate">{user.name}</h3>
+              {type === 'friend' && user.favorite && (
+                <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+              )}
+            </div>
             <p className="font-pixelated text-xs text-muted-foreground truncate">@{user.username}</p>
             <p className="font-pixelated text-xs text-muted-foreground">
-              {type === 'friend' ? 'Friends since' : type === 'request' ? 'Requested' : 'Joined'} {' '}
-              {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+              {type === 'friend' ? (
+                user.last_interaction ? (
+                  <>Last activity {formatDistanceToNow(new Date(user.last_interaction), { addSuffix: true })}</>
+                ) : (
+                  <>Friends since {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}</>
+                )
+              ) : type === 'request' ? (
+                <>Requested {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}</>
+              ) : (
+                <>
+                  Joined {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+                  {user.mutualFriends && user.mutualFriends > 0 && (
+                    <span className="ml-2 text-social-blue">• {user.mutualFriends} mutual friend{user.mutualFriends !== 1 ? 's' : ''}</span>
+                  )}
+                </>
+              )}
             </p>
           </div>
 
@@ -552,15 +820,44 @@ export function Friends() {
                   <MessageCircle className="h-3 w-3 mr-1" />
                   Chat
                 </Button>
-                <Button
-                  onClick={handleRemoveFriendClick}
-                  size="sm"
-                  variant="outline"
-                  className="font-pixelated text-xs h-6 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50"
-                >
-                  <UserMinus className="h-3 w-3 mr-1" />
-                  Remove
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="font-pixelated text-xs h-6 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50"
+                    >
+                      <UserMinus className="h-3 w-3 mr-1" />
+                      Manage
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem 
+                      onClick={() => toggleFavoriteFriend(user.id, !!user.favorite)}
+                      className="font-pixelated text-xs cursor-pointer"
+                    >
+                      {user.favorite ? (
+                        <>
+                          <Star className="h-3 w-3 mr-2 text-yellow-500 fill-yellow-500" />
+                          Remove from favorites
+                        </>
+                      ) : (
+                        <>
+                          <Star className="h-3 w-3 mr-2" />
+                          Add to favorites
+                        </>
+                      )}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => setShowRemoveDialog({show: true, friend: user})}
+                      className="font-pixelated text-xs text-destructive cursor-pointer"
+                    >
+                      <UserMinus className="h-3 w-3 mr-2" />
+                      Remove friend
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             )}
             
@@ -608,7 +905,10 @@ export function Friends() {
     <Card className={`hover:shadow-md transition-all duration-200 hover-scale ${isCrimson ? 'border-red-100' : ''}`}>
       <CardContent className="p-3">
         <div className="flex items-center gap-3">
-          <Avatar className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'}`}>
+          <Avatar 
+            className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'} cursor-pointer`}
+            onClick={() => handleUserClick(user)}
+          >
             {user.avatar ? (
               <AvatarImage src={user.avatar} alt={user.name} />
             ) : (
@@ -618,12 +918,19 @@ export function Friends() {
             )}
           </Avatar>
           
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleUserClick(user)}>
             <h3 className="font-pixelated text-sm font-medium truncate">{user.name}</h3>
             <p className="font-pixelated text-xs text-muted-foreground truncate">@{user.username}</p>
-            <p className="font-pixelated text-xs text-muted-foreground">
-              Joined {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
-            </p>
+            <div className="flex items-center">
+              <p className="font-pixelated text-xs text-muted-foreground">
+                Joined {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+              </p>
+              {user.mutualFriends && user.mutualFriends > 0 && (
+                <div className="flex items-center ml-2">
+                  <span className="text-xs text-social-blue font-pixelated">• {user.mutualFriends} mutual</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-col gap-1">
@@ -638,7 +945,12 @@ export function Friends() {
                   Chat
                 </Button>
                 <Button
-                  onClick={handleRemoveFriendClick}
+                  onClick={() => {
+                    const friend = friends.find(f => f.id === user.id);
+                    if (friend) {
+                      setShowRemoveDialog({show: true, friend});
+                    }
+                  }}
                   size="sm"
                   variant="outline"
                   className="font-pixelated text-xs h-6 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50"
@@ -713,30 +1025,118 @@ export function Friends() {
             </h1>
           </div>
           
-          <div className="relative max-w-sm">
-            {isCrimson ? (
-              <CrimsonSearchInput
-                placeholder="Search by name or username..."
-                value={searchQuery}
-                onChange={handleSearch}
-                className="font-pixelated text-xs h-8"
-              />
-            ) : (
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
+          <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={refreshData}
+                    disabled={refreshing}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-pixelated text-xs">Refresh</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <div className="relative max-w-sm">
+              {isCrimson ? (
+                <CrimsonSearchInput
                   placeholder="Search by name or username..."
                   value={searchQuery}
                   onChange={handleSearch}
-                  className="font-pixelated text-xs h-8 pl-8"
+                  className="font-pixelated text-xs h-8"
                 />
-              </div>
-            )}
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or username..."
+                    value={searchQuery}
+                    onChange={handleSearch}
+                    className="font-pixelated text-xs h-8 pl-8"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Filter and Sort Controls */}
+        <div className="flex items-center justify-between p-2 bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-7 px-2 font-pixelated text-xs ${filterFavorites ? 'bg-yellow-100 text-yellow-700' : ''}`}
+              onClick={() => setFilterFavorites(!filterFavorites)}
+            >
+              <Star className={`h-3 w-3 mr-1 ${filterFavorites ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+              {filterFavorites ? 'All Friends' : 'Favorites'}
+            </Button>
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground font-pixelated">Sort:</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 px-2 font-pixelated text-xs">
+                  {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Date Added' : 'Recent Activity'}
+                  <SortAsc className="h-3 w-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem 
+                  onClick={() => setSortBy('name')}
+                  className={`font-pixelated text-xs cursor-pointer ${sortBy === 'name' ? 'bg-muted' : ''}`}
+                >
+                  <Check className={`h-3 w-3 mr-2 ${sortBy === 'name' ? 'opacity-100' : 'opacity-0'}`} />
+                  Name
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setSortBy('date')}
+                  className={`font-pixelated text-xs cursor-pointer ${sortBy === 'date' ? 'bg-muted' : ''}`}
+                >
+                  <Check className={`h-3 w-3 mr-2 ${sortBy === 'date' ? 'opacity-100' : 'opacity-0'}`} />
+                  Date Added
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setSortBy('activity')}
+                  className={`font-pixelated text-xs cursor-pointer ${sortBy === 'activity' ? 'bg-muted' : ''}`}
+                >
+                  <Check className={`h-3 w-3 mr-2 ${sortBy === 'activity' ? 'opacity-100' : 'opacity-0'}`} />
+                  Recent Activity
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="font-pixelated text-xs cursor-pointer"
+                >
+                  {sortOrder === 'asc' ? (
+                    <>
+                      <SortAsc className="h-3 w-3 mr-2" />
+                      Ascending
+                    </>
+                  ) : (
+                    <>
+                      <SortDesc className="h-3 w-3 mr-2" />
+                      Descending
+                    </>
+                  )}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-[calc(100vh-120px)]">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-[calc(100vh-160px)]">
           <TabsList className={`grid w-full grid-cols-4 mx-3 mt-3 ${isCrimson ? 'bg-red-50' : ''}`}>
             <TabsTrigger value="friends" className="font-pixelated text-xs relative">
               Friends
@@ -774,9 +1174,9 @@ export function Friends() {
 
           <TabsContent value="friends" className="h-[calc(100%-60px)] mt-3">
             <ScrollArea className="h-full px-3 scroll-container">
-              {filterUsers(friends).length > 0 ? (
+              {filterUsers(sortFriends(friends)).length > 0 ? (
                 <div className="space-y-3 pb-3">
-                  {filterUsers(friends).map((friend) => (
+                  {filterUsers(sortFriends(friends)).map((friend) => (
                     <UserCard key={friend.id} user={friend} type="friend" />
                   ))}
                 </div>
@@ -784,14 +1184,27 @@ export function Friends() {
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
                   <Users className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
                   <h2 className="font-pixelated text-sm font-medium mb-2">
-                    {searchQuery ? 'No friends found' : 'No friends yet'}
+                    {searchQuery ? 'No friends found' : filterFavorites ? 'No favorite friends yet' : 'No friends yet'}
                   </h2>
                   <p className="font-pixelated text-xs text-muted-foreground max-w-sm leading-relaxed">
                     {searchQuery 
                       ? 'Try adjusting your search terms'
-                      : 'Start connecting with people by sending friend requests!'
+                      : filterFavorites
+                        ? 'Add friends to your favorites list by clicking the star icon'
+                        : 'Start connecting with people by sending friend requests!'
                     }
                   </p>
+                  {filterFavorites && friends.length > 0 && (
+                    <Button
+                      onClick={() => setFilterFavorites(false)}
+                      variant="outline"
+                      size="sm"
+                      className="mt-4 font-pixelated text-xs"
+                    >
+                      <Users className="h-3 w-3 mr-1" />
+                      Show All Friends
+                    </Button>
+                  )}
                 </div>
               )}
             </ScrollArea>
@@ -842,6 +1255,16 @@ export function Friends() {
                       : 'Check back later for new friend suggestions!'
                     }
                   </p>
+                  <Button
+                    onClick={refreshData}
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 font-pixelated text-xs"
+                    disabled={refreshing}
+                  >
+                    <RefreshCw className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+                    Refresh Suggestions
+                  </Button>
                 </div>
               )}
             </ScrollArea>
@@ -890,12 +1313,48 @@ export function Friends() {
                   <p className="font-pixelated text-xs text-muted-foreground max-w-sm leading-relaxed">
                     Enter a name or username to find people
                   </p>
+                  <div className="mt-6 w-full max-w-sm">
+                    <UserSearch />
+                  </div>
                 </div>
               )}
             </ScrollArea>
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Remove Friend Confirmation Dialog */}
+      <AlertDialog 
+        open={showRemoveDialog.show} 
+        onOpenChange={(open) => setShowRemoveDialog({show: open, friend: showRemoveDialog.friend})}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-pixelated">Remove Friend</AlertDialogTitle>
+            <AlertDialogDescription className="font-pixelated text-xs">
+              Are you sure you want to remove {showRemoveDialog.friend?.name} from your friends list? 
+              You'll need to send a new friend request if you want to connect again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="font-pixelated text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => showRemoveDialog.friend && handleRemoveFriend(showRemoveDialog.friend)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
+              disabled={!!removingFriend}
+            >
+              {removingFriend ? 'Removing...' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* User Profile Dialog */}
+      <UserProfileDialog
+        open={showUserDialog}
+        onOpenChange={setShowUserDialog}
+        user={selectedUser}
+      />
     </DashboardLayout>
   );
 }
