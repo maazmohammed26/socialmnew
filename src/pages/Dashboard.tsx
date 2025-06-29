@@ -169,9 +169,6 @@ export function Dashboard() {
         {/* Stories Container - Fixed at top */}
         <StoriesContainer />
         
-        {/* Theme Prompt */}
-        <ThemePrompt />
-        
         {/* Scrollable Content Area */}
         <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-180px)] px-2 scroll-smooth">
           {/* Post Box */}

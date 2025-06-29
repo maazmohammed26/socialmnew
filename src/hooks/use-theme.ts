@@ -31,7 +31,7 @@ const customStorage = {
         
         if (columnsError || !columnsExist) {
           console.log('Theme columns do not exist yet, using defaults');
-          return JSON.stringify({ state: { theme: 'light', colorTheme: 'green', hasShownThemePrompt: false } });
+          return JSON.stringify({ state: { theme: 'light', colorTheme: 'green', hasShownThemePrompt: true } });
         }
         
         const { data, error } = await supabase
@@ -42,7 +42,7 @@ const customStorage = {
         
         if (error) {
           console.error('Error fetching theme from database:', error);
-          return JSON.stringify({ state: { theme: 'light', colorTheme: 'green', hasShownThemePrompt: false } });
+          return JSON.stringify({ state: { theme: 'light', colorTheme: 'green', hasShownThemePrompt: true } });
         }
 
         if (data?.theme_preference) {
@@ -51,14 +51,14 @@ const customStorage = {
             state: { 
               theme: data.theme_preference,
               colorTheme: data.color_theme || 'green',
-              hasShownThemePrompt: false
+              hasShownThemePrompt: true
             } 
           }));
           return JSON.stringify({ 
             state: { 
               theme: data.theme_preference,
               colorTheme: data.color_theme || 'green',
-              hasShownThemePrompt: false
+              hasShownThemePrompt: true
             } 
           });
         }
@@ -68,7 +68,7 @@ const customStorage = {
     }
 
     // Default to light theme and green color theme if nothing is found
-    return JSON.stringify({ state: { theme: 'light', colorTheme: 'green', hasShownThemePrompt: false } });
+    return JSON.stringify({ state: { theme: 'light', colorTheme: 'green', hasShownThemePrompt: true } });
   },
 
   setItem: async (name: string, value: string): Promise<void> => {
@@ -112,7 +112,7 @@ export const useTheme = create<ThemeStore>()(
     (set) => ({
       theme: 'light',
       colorTheme: 'green',
-      hasShownThemePrompt: false,
+      hasShownThemePrompt: true, // Set to true by default to prevent prompt from showing
       setTheme: async (theme) => {
         const root = window.document.documentElement;
         root.classList.remove('light', 'dark', 'win95', 'modern', 'crimson');

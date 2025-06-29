@@ -4,27 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { OneSignalNotificationBanner } from '@/components/notifications/OneSignalNotificationBanner';
-import { SocialChatAnnouncement } from '@/components/notifications/SocialChatAnnouncements';
-import { useOneSignalNotifications } from '@/hooks/use-onesignal-notifications';
-import { 
-  Bell, 
-  Check, 
-  Trash2, 
-  User, 
-  MessageSquare, 
-  Heart, 
-  UserPlus, 
-  Info, 
-  CheckCheck, 
-  X,
-  Wifi,
-  WifiOff,
-  UserX,
-  Settings,
-  Sparkles
-} from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Bell, Check, Trash2, User, MessageCircle, Heart, UserPlus, Info, CheckCheck, X, Wifi, WifiOff, UserX, Settings, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -56,13 +37,12 @@ export function Notifications() {
   const [loading, setLoading] = useState(true);
   const [showInfo, setShowInfo] = useState(false);
   const [showClearDialog, setShowClearDialog] = useState(false);
-  const [showNotificationBanner, setShowNotificationBanner] = useState(true);
-  const [showAnnouncement, setShowAnnouncement] = useState(true);
+  const [showNotificationBanner, setShowNotificationBanner] = useState(false);
+  const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const { toast } = useToast();
-  const { oneSignalUser, requestPermission, unsubscribe } = useOneSignalNotifications();
 
   const fetchNotifications = async (showLoading = true) => {
     try {
@@ -87,15 +67,6 @@ export function Notifications() {
           id: 'theme-tip',
           user_id: user.id,
           type: 'system',
-          content: "🎨 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!",
-          reference_id: null,
-          read: false,
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: 'founder-message',
-          user_id: user.id,
-          type: 'system',
           content: "👋 Hello! I'm Mohammed Maaz A, the developer of SocialChat. This platform was created by me alone, so there might be some loading issues - please ignore them. Thank you for your support and patience!",
           reference_id: null,
           read: false,
@@ -112,15 +83,6 @@ export function Notifications() {
       
       // Fallback to static notifications if there's an error
       const staticNotifications = [
-        {
-          id: 'theme-tip',
-          user_id: 'static',
-          type: 'system',
-          content: "🎨 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!",
-          reference_id: null,
-          read: false,
-          created_at: new Date().toISOString(),
-        },
         {
           id: 'founder-message',
           user_id: 'static',
@@ -211,10 +173,44 @@ export function Notifications() {
   };
 
   const handleNotificationToggle = async () => {
-    if (oneSignalUser.subscribed) {
-      await unsubscribe();
-    } else {
-      await requestPermission();
+    if (!('Notification' in window)) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Your browser does not support notifications'
+      });
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      
+      if (permission === 'granted') {
+        toast({
+          title: 'Notifications enabled',
+          description: 'You will now receive notifications for new messages and activities'
+        });
+        
+        // Send a test notification
+        new Notification('Notifications Enabled', {
+          body: 'You will now receive notifications for new messages and activities',
+          icon: '/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png'
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Notifications disabled',
+          description: 'You will not receive notifications'
+        });
+      }
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to enable notifications'
+      });
     }
   };
 
@@ -227,11 +223,11 @@ export function Notifications() {
       case 'friend_rejected':
         return <UserX className="h-4 w-4 text-destructive" />;
       case 'message':
-        return <MessageSquare className="h-4 w-4 text-social-green" />;
+        return <MessageCircle className="h-4 w-4 text-social-green" />;
       case 'like':
         return <Heart className="h-4 w-4 text-social-magenta" />;
       case 'comment':
-        return <MessageSquare className="h-4 w-4 text-social-purple" />;
+        return <MessageCircle className="h-4 w-4 text-social-purple" />;
       case 'system':
         return <Sparkles className="h-4 w-4 text-blue-500" />;
       default:
@@ -337,7 +333,6 @@ export function Notifications() {
               <h1 className="font-pixelated text-lg font-medium">Notifications</h1>
               <p className="font-pixelated text-xs text-muted-foreground">
                 {notifications.length} total • {unreadCount} unread • {isOnline ? 'Online' : 'Offline'}
-                {oneSignalUser.subscribed && ' • Push enabled'}
               </p>
             </div>
           </div>
@@ -377,40 +372,6 @@ export function Notifications() {
             )}
           </div>
         </div>
-
-        {/* OneSignal Notification Banner */}
-        {showNotificationBanner && !oneSignalUser.subscribed && (
-          <OneSignalNotificationBanner onDismiss={() => setShowNotificationBanner(false)} />
-        )}
-
-        {/* SocialChat Announcement */}
-        {showAnnouncement && (
-          <SocialChatAnnouncement onDismiss={() => setShowAnnouncement(false)} />
-        )}
-
-        {/* Push Notification Status */}
-        {oneSignalUser.subscribed && (
-          <div className="mx-4 mt-4 p-3 bg-social-green/10 border border-social-green/20 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bell className="h-4 w-4 text-social-green" />
-                <div>
-                  <p className="font-pixelated text-xs font-medium text-social-green">Push Notifications Active</p>
-                  <p className="font-pixelated text-xs text-muted-foreground">You'll receive notifications even when SocialChat is closed</p>
-                </div>
-              </div>
-              <Button
-                onClick={handleNotificationToggle}
-                size="sm"
-                variant="outline"
-                className="font-pixelated text-xs"
-              >
-                <Settings className="h-3 w-3 mr-1" />
-                Manage
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Content */}
         <ScrollArea className="h-[calc(100vh-180px)] p-4 scroll-container scroll-smooth">
@@ -491,14 +452,6 @@ export function Notifications() {
               <p className="font-pixelated text-sm text-muted-foreground max-w-sm leading-relaxed">
                 You don't have any notifications right now. When you receive friend requests, messages, likes, or comments, they'll appear here.
               </p>
-              {!oneSignalUser.subscribed && (
-                <Button
-                  onClick={requestPermission}
-                  className="mt-4 bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs"
-                >
-                  Enable Push Notifications
-                </Button>
-              )}
             </div>
           )}
         </ScrollArea>
@@ -515,7 +468,7 @@ export function Notifications() {
             <div className="space-y-4">
               <div className="space-y-3">
                 <div className="flex items-center gap-3 p-3 bg-social-green/10 rounded-lg">
-                  <MessageSquare className="h-4 w-4 text-social-green" />
+                  <MessageCircle className="h-4 w-4 text-social-green" />
                   <div>
                     <p className="font-pixelated text-xs font-medium">Messages</p>
                     <p className="font-pixelated text-xs text-muted-foreground">New direct messages from friends</p>
