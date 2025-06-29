@@ -23,6 +23,10 @@ import {
   getOfflineMessages,
   isOnline
 } from '@/lib/offline-storage';
+import { GradientText, GlowEffect } from '@/components/ui/crimson-effects';
+import { CrimsonButton } from '@/components/ui/crimson-button';
+import { CrimsonInput } from '@/components/ui/crimson-input';
+import { CrimsonAvatar } from '@/components/ui/crimson-avatar';
 
 interface Friend {
   id: string;
@@ -33,6 +37,7 @@ interface Friend {
   lastMessageTime?: string;
   lastMessageContent?: string;
   unreadCount?: number;
+  sortKey?: number; // Added for stable sorting
 }
 
 interface Message {
@@ -71,6 +76,9 @@ export function Messages() {
   const friendsListRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { online, offlineEnabled, pendingCount, saveMessageOffline } = useOfflineMode();
+  
+  // Check if we're in crimson theme
+  const isCrimson = document.documentElement.classList.contains('crimson');
 
   const fetchFriends = async () => {
     try {
@@ -84,8 +92,15 @@ export function Messages() {
       
       if (cachedFriends && cachedFriends.length > 0) {
         console.log('Using cached friends data');
-        setFriends(cachedFriends);
-        setFilteredFriends(cachedFriends);
+        
+        // Add a stable sortKey to each friend based on their position in the array
+        const friendsWithSortKey = cachedFriends.map((friend, index) => ({
+          ...friend,
+          sortKey: index
+        }));
+        
+        setFriends(friendsWithSortKey);
+        setFilteredFriends(friendsWithSortKey);
         setLoading(false);
       }
 
@@ -130,7 +145,7 @@ export function Messages() {
             .single();
           
           if (friendProfile && friendProfile.id) {
-            // Get last message and unread count for this friend - use maybeSingle() to handle no messages
+            // Get last message and unread count for this friend
             const { data: lastMessage } = await supabase
               .from('messages')
               .select('content, created_at, sender_id, read')
@@ -155,7 +170,8 @@ export function Messages() {
               isBlocked: false,
               lastMessageTime: lastMessage?.created_at || friend.created_at,
               lastMessageContent: lastMessage?.content || '',
-              unreadCount: unreadCount || 0
+              unreadCount: unreadCount || 0,
+              sortKey: formattedFriends.length // Add a stable sort key
             });
           }
         }
@@ -515,20 +531,18 @@ export function Messages() {
       setNewMessage('');
       
       // Update friends list with new last message
-      const updatedFriends = friends.map(f => 
-        f.id === selectedFriend.id 
-          ? { 
-              ...f, 
-              lastMessageTime: new Date().toISOString(),
-              lastMessageContent: newMessage.trim()
-            } 
-          : f
-      ).sort((a, b) => {
-        const timeA = new Date(a.lastMessageTime || 0).getTime();
-        const timeB = new Date(b.lastMessageTime || 0).getTime();
-        return timeB - timeA;
+      const updatedFriends = friends.map(f => {
+        if (f.id === selectedFriend.id) {
+          return { 
+            ...f, 
+            lastMessageTime: new Date().toISOString(),
+            lastMessageContent: newMessage.trim()
+          };
+        }
+        return f;
       });
       
+      // Maintain stable sorting by keeping the sortKey
       setFriends(updatedFriends);
       setFilteredFriends(updatedFriends);
       
@@ -734,12 +748,21 @@ export function Messages() {
               <div className="flex flex-col gap-2">
                 <h2 className="font-pixelated text-sm font-medium">Messages</h2>
                 <div className="relative">
-                  <Input
-                    placeholder="Search messages..."
-                    value={searchQuery}
-                    onChange={handleSearch}
-                    className="w-full h-8 font-pixelated text-xs message-search-input"
-                  />
+                  {isCrimson ? (
+                    <CrimsonInput
+                      placeholder="Search messages..."
+                      value={searchQuery}
+                      onChange={handleSearch}
+                      className="w-full h-8 font-pixelated text-xs message-search-input"
+                    />
+                  ) : (
+                    <Input
+                      placeholder="Search messages..."
+                      value={searchQuery}
+                      onChange={handleSearch}
+                      className="w-full h-8 font-pixelated text-xs message-search-input"
+                    />
+                  )}
                   {searchQuery && (
                     <Button
                       variant="ghost"
@@ -788,81 +811,105 @@ export function Messages() {
                   </div>
                 ) : filteredFriends.length > 0 ? (
                   <div className="p-2">
-                    {filteredFriends.map(friend => (
-                      <div
-                        key={friend.id}
-                        onClick={() => {
-                          setSelectedFriend(friend);
-                          fetchMessages(friend.id);
-                        }}
-                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 relative message-list-item ${
-                          selectedFriend?.id === friend.id 
-                            ? 'active' 
-                            : ''
-                        } ${friend.isBlocked ? 'opacity-50' : ''} ${
-                          friend.unreadCount && friend.unreadCount > 0 ? 'bg-social-green/5 border-l-4 border-social-green' : ''
-                        }`}
-                      >
-                        <Avatar className="h-10 w-10 border-2 border-background flex-shrink-0">
-                          {friend.avatar ? (
-                            <AvatarImage src={friend.avatar} />
-                          ) : (
-                            <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                              {friend.name.substring(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          )}
-                        </Avatar>
+                    {/* Sort by sortKey to maintain stable order */}
+                    {filteredFriends
+                      .sort((a, b) => {
+                        // First sort by unread count (messages with unread first)
+                        if ((a.unreadCount || 0) > 0 && (b.unreadCount || 0) === 0) return -1;
+                        if ((a.unreadCount || 0) === 0 && (b.unreadCount || 0) > 0) return 1;
                         
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p className={`font-medium truncate text-sm font-pixelated ${
-                              friend.unreadCount && friend.unreadCount > 0 ? 'text-foreground' : 'text-foreground'
-                            }`}>
-                              {friend.name}
-                            </p>
-                            {friend.lastMessageTime && (
-                              <span className="text-xs text-muted-foreground font-pixelated">
-                                {formatLastMessageTime(friend.lastMessageTime)}
-                              </span>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center justify-between">
-                            <p className={`text-xs truncate font-pixelated ${
-                              friend.unreadCount && friend.unreadCount > 0 
-                                ? 'text-foreground font-medium' 
-                                : 'text-muted-foreground'
-                            }`}>
-                              {friend.isBlocked ? (
-                                <span className="text-destructive">• No longer friends</span>
-                              ) : friend.lastMessageContent ? (
-                                truncateMessage(friend.lastMessageContent)
+                        // Then sort by last message time (most recent first)
+                        const timeA = new Date(a.lastMessageTime || 0).getTime();
+                        const timeB = new Date(b.lastMessageTime || 0).getTime();
+                        if (timeA !== timeB) return timeB - timeA;
+                        
+                        // Finally, use the stable sortKey as a tiebreaker
+                        return (a.sortKey || 0) - (b.sortKey || 0);
+                      })
+                      .map(friend => (
+                        <div
+                          key={friend.id}
+                          onClick={() => {
+                            setSelectedFriend(friend);
+                            fetchMessages(friend.id);
+                          }}
+                          className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 relative message-list-item ${
+                            selectedFriend?.id === friend.id 
+                              ? 'active' 
+                              : ''
+                          } ${friend.isBlocked ? 'opacity-50' : ''} ${
+                            friend.unreadCount && friend.unreadCount > 0 ? 'bg-social-green/5 border-l-4 border-social-green' : ''
+                          }`}
+                        >
+                          {isCrimson ? (
+                            <CrimsonAvatar
+                              src={friend.avatar}
+                              fallback={friend.name.substring(0, 2).toUpperCase()}
+                              className="h-10 w-10 border-2 border-background flex-shrink-0"
+                              glow={friend.unreadCount && friend.unreadCount > 0}
+                            />
+                          ) : (
+                            <Avatar className="h-10 w-10 border-2 border-background flex-shrink-0">
+                              {friend.avatar ? (
+                                <AvatarImage src={friend.avatar} />
                               ) : (
-                                `Start chatting with @${friend.username}`
+                                <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
+                                  {friend.name.substring(0, 2).toUpperCase()}
+                                </AvatarFallback>
                               )}
-                            </p>
-                            
-                            {/* Show unread count badge or grey circle */}
-                            <div className="ml-2 flex-shrink-0">
-                              {friend.unreadCount && friend.unreadCount > 0 ? (
-                                <Badge 
-                                  variant="default" 
-                                  className="h-5 w-5 p-0 text-xs flex items-center justify-center bg-social-green text-white"
-                                >
-                                  {friend.unreadCount > 9 ? '9+' : friend.unreadCount}
-                                </Badge>
-                              ) : (
-                                <div className="w-2 h-2 rounded-full bg-gray-300 opacity-60"></div>
+                            </Avatar>
+                          )}
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <p className={`font-medium truncate text-sm font-pixelated ${
+                                friend.unreadCount && friend.unreadCount > 0 ? 'text-foreground' : 'text-foreground'
+                              }`}>
+                                {friend.name}
+                              </p>
+                              {friend.lastMessageTime && (
+                                <span className="text-xs text-muted-foreground font-pixelated">
+                                  {formatLastMessageTime(friend.lastMessageTime)}
+                                </span>
                               )}
                             </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <p className={`text-xs truncate font-pixelated ${
+                                friend.unreadCount && friend.unreadCount > 0 
+                                  ? 'text-foreground font-medium' 
+                                  : 'text-muted-foreground'
+                              }`}>
+                                {friend.isBlocked ? (
+                                  <span className="text-destructive">• No longer friends</span>
+                                ) : friend.lastMessageContent ? (
+                                  truncateMessage(friend.lastMessageContent)
+                                ) : (
+                                  `Start chatting with @${friend.username}`
+                                )}
+                              </p>
+                              
+                              {/* Show unread count badge or grey circle */}
+                              <div className="ml-2 flex-shrink-0">
+                                {friend.unreadCount && friend.unreadCount > 0 ? (
+                                  <Badge 
+                                    variant="default" 
+                                    className={`h-5 w-5 p-0 text-xs flex items-center justify-center ${isCrimson ? 'bg-red-600 text-white' : 'bg-social-green text-white'}`}
+                                  >
+                                    {friend.unreadCount > 9 ? '9+' : friend.unreadCount}
+                                  </Badge>
+                                ) : (
+                                  <div className="w-2 h-2 rounded-full bg-gray-300 opacity-60"></div>
+                                )}
+                              </div>
+                            </div>
                           </div>
+                          
+                          {friend.isBlocked && (
+                            <UserX className="h-4 w-4 text-destructive flex-shrink-0" />
+                          )}
                         </div>
-                        
-                        {friend.isBlocked && (
-                          <UserX className="h-4 w-4 text-destructive flex-shrink-0" />
-                        )}
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full p-6 text-center">
@@ -903,17 +950,33 @@ export function Messages() {
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  <Avatar className="h-8 w-8 flex-shrink-0">
-                    {selectedFriend.avatar ? (
-                      <AvatarImage src={selectedFriend.avatar} />
-                    ) : (
-                      <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                        {selectedFriend.name.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
+                  {isCrimson ? (
+                    <CrimsonAvatar
+                      src={selectedFriend.avatar}
+                      fallback={selectedFriend.name.substring(0, 2).toUpperCase()}
+                      className="h-8 w-8 flex-shrink-0"
+                    />
+                  ) : (
+                    <Avatar className="h-8 w-8 flex-shrink-0">
+                      {selectedFriend.avatar ? (
+                        <AvatarImage src={selectedFriend.avatar} />
+                      ) : (
+                        <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
+                          {selectedFriend.name.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                  )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate text-sm font-pixelated">{selectedFriend.name}</p>
+                    <p className="font-medium truncate text-sm font-pixelated">
+                      {isCrimson ? (
+                        <GradientText gradientColors={['#dc2626', '#b91c1c']}>
+                          {selectedFriend.name}
+                        </GradientText>
+                      ) : (
+                        selectedFriend.name
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground truncate font-pixelated">
                       @{selectedFriend.username}
                       {selectedFriend.isBlocked && (
@@ -977,7 +1040,7 @@ export function Messages() {
                         {messageGroups.length === 0 && !selectedFriend.isBlocked && (
                           <div className="text-center py-8">
                             <div className="bg-muted/30 border border-muted rounded-lg p-6 max-w-md mx-auto">
-                              <Heart className="h-8 w-8 text-social-green mx-auto mb-3" />
+                              <Heart className={`h-8 w-8 ${isCrimson ? 'text-red-500' : 'text-social-green'} mx-auto mb-3`} />
                               <p className="font-pixelated text-sm font-medium text-foreground mb-2">
                                 Start your conversation
                               </p>
@@ -1004,20 +1067,29 @@ export function Messages() {
                                 className={`flex gap-2 ${message.sender_id === currentUser?.id ? 'justify-end' : 'justify-start'}`}
                               >
                                 <div className={`flex gap-2 max-w-[75%] ${message.sender_id === currentUser?.id ? 'flex-row-reverse' : ''}`}>
-                                  <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
-                                    {message.sender?.avatar ? (
-                                      <AvatarImage src={message.sender.avatar} />
-                                    ) : (
-                                      <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                                        {message.sender?.name.substring(0, 2).toUpperCase()}
-                                      </AvatarFallback>
-                                    )}
-                                  </Avatar>
+                                  {isCrimson ? (
+                                    <CrimsonAvatar
+                                      src={message.sender?.avatar}
+                                      fallback={message.sender?.name.substring(0, 2).toUpperCase() || 'U'}
+                                      className="h-6 w-6 mt-1 flex-shrink-0"
+                                      size="sm"
+                                    />
+                                  ) : (
+                                    <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
+                                      {message.sender?.avatar ? (
+                                        <AvatarImage src={message.sender.avatar} />
+                                      ) : (
+                                        <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
+                                          {message.sender?.name.substring(0, 2).toUpperCase()}
+                                        </AvatarFallback>
+                                      )}
+                                    </Avatar>
+                                  )}
                                   <div 
                                     className={`p-2 rounded-lg relative ${
                                       message.sender_id === currentUser?.id 
-                                        ? 'bg-primary text-primary-foreground' 
-                                        : 'bg-muted'
+                                        ? 'message-bubble-sent' 
+                                        : 'message-bubble-received'
                                     }`}
                                   >
                                     <p className="text-xs whitespace-pre-wrap break-words font-pixelated">
@@ -1034,8 +1106,8 @@ export function Messages() {
                                             <Circle className="h-2 w-2 text-amber-500" />
                                           ) : message.read ? (
                                             <div className="flex">
-                                              <Circle className="h-2 w-2 fill-social-green text-social-green" />
-                                              <Circle className="h-2 w-2 fill-social-green text-social-green -ml-1" />
+                                              <Circle className={`h-2 w-2 fill-current ${isCrimson ? 'text-red-400' : 'text-social-green'}`} />
+                                              <Circle className={`h-2 w-2 fill-current ${isCrimson ? 'text-red-400' : 'text-social-green'} -ml-1`} />
                                             </div>
                                           ) : (
                                             <Circle className="h-2 w-2 fill-muted-foreground text-muted-foreground" />
@@ -1078,13 +1150,25 @@ export function Messages() {
                             className="min-h-[52px] max-h-[120px] resize-none flex-1 font-pixelated text-xs"
                             disabled={sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
                           />
-                          <Button
-                            onClick={sendMessage}
-                            disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
-                            className="bg-primary hover:bg-primary/90 flex-shrink-0 h-[52px] w-12"
-                          >
-                            <Send className="h-4 w-4" />
-                          </Button>
+                          {isCrimson ? (
+                            <CrimsonButton
+                              onClick={sendMessage}
+                              disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
+                              className="flex-shrink-0 h-[52px] w-12"
+                              gradient
+                              glow
+                            >
+                              <Send className="h-4 w-4" />
+                            </CrimsonButton>
+                          ) : (
+                            <Button
+                              onClick={sendMessage}
+                              disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
+                              className="bg-primary hover:bg-primary/90 flex-shrink-0 h-[52px] w-12"
+                            >
+                              <Send className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground font-pixelated">
                           Press Enter to send, Shift + Enter for new line
@@ -1099,8 +1183,16 @@ export function Messages() {
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <MessageSquare className="h-16 w-16 text-muted-foreground mb-4" />
-                <h2 className="text-lg font-semibold mb-2 font-pixelated">Your Messages</h2>
+                <MessageSquare className={`h-16 w-16 ${isCrimson ? 'text-red-400' : 'text-muted-foreground'} mb-4`} />
+                <h2 className="text-lg font-semibold mb-2 font-pixelated">
+                  {isCrimson ? (
+                    <GradientText gradientColors={['#dc2626', '#b91c1c']}>
+                      Your Messages
+                    </GradientText>
+                  ) : (
+                    "Your Messages"
+                  )}
+                </h2>
                 <p className="text-muted-foreground font-pixelated text-sm">
                   Select a conversation to start messaging
                 </p>
