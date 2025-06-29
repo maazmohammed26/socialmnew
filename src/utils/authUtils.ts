@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 
@@ -133,6 +132,34 @@ export const loginUser = async (email: string, password: string) => {
     return data;
   } catch (error: any) {
     console.error('Login error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Sign in with Google
+ */
+export const signInWithGoogle = async () => {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      }
+    });
+
+    if (error) {
+      console.error('Google sign in error:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error: any) {
+    console.error('Google sign in error:', error);
     throw error;
   }
 };

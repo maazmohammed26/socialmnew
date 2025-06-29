@@ -82,38 +82,28 @@ export function useEnhancedNotifications() {
   // Create system notification about theme customization
   const createSystemNotification = useCallback(async (userId: string) => {
     try {
-      // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
+      // Create sample notifications
+      const sampleNotifications = [
+        {
+          id: 'theme-tip',
+          user_id: userId,
+          type: 'system',
+          content: "🎨 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!",
+          read: false,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'founder-message',
+          user_id: userId,
+          type: 'system',
+          content: "👋 Hello! I'm Mohammed Maaz A, the developer of SocialChat. This platform was created by me alone, so there might be some loading issues - please ignore them. Thank you for your support and patience!",
+          read: false,
+          created_at: new Date(Date.now() - 1000).toISOString(),
+        }
+      ];
       
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping system notification');
-        return;
-      }
-      
-      const systemNotification = {
-        user_id: userId,
-        type: 'system',
-        content: "💡 Don't like the pixel font? No problem! Visit your Profile section to change themes and customize fonts & colors to your preference.",
-        read: false
-      };
-
-      const { data, error } = await supabase
-        .from('notifications')
-        .insert(systemNotification)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error creating system notification:', error);
-        return;
-      }
-
-      // Add to local state
-      setNotifications(prev => [data, ...prev]);
-      setUnreadCount(prev => prev + 1);
+      setNotifications(sampleNotifications);
+      setUnreadCount(2);
 
       // Show toast notification with highlight
       toast({
@@ -131,36 +121,28 @@ export function useEnhancedNotifications() {
   // Fetch notifications from database
   const fetchNotifications = useCallback(async (userId: string) => {
     try {
-      // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
+      // Create sample notifications
+      const sampleNotifications = [
+        {
+          id: 'theme-tip',
+          user_id: userId,
+          type: 'system',
+          content: "🎨 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!",
+          read: false,
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'founder-message',
+          user_id: userId,
+          type: 'system',
+          content: "👋 Hello! I'm Mohammed Maaz A, the developer of SocialChat. This platform was created by me alone, so there might be some loading issues - please ignore them. Thank you for your support and patience!",
+          read: false,
+          created_at: new Date(Date.now() - 1000).toISOString(),
+        }
+      ];
       
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, using empty array');
-        setNotifications([]);
-        setUnreadCount(0);
-        return;
-      }
-      
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', userId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        console.error('Error fetching notifications:', error);
-        setNotifications([]);
-        setUnreadCount(0);
-        return;
-      }
-
-      setNotifications(data || []);
-      setUnreadCount(data?.filter(n => !n.read).length || 0);
+      setNotifications(sampleNotifications);
+      setUnreadCount(2);
     } catch (error) {
       console.error('Error fetching notifications:', error);
       setNotifications([]);
@@ -170,51 +152,33 @@ export function useEnhancedNotifications() {
 
   // Create notification in database
   const createNotification = useCallback(async (
-    userId: string, 
     type: string, 
     content: string, 
     referenceId?: string
   ) => {
     try {
-      // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
+      if (!currentUser) return null;
       
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping notification creation');
-        return null;
-      }
-      
-      const { data, error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: userId,
-          type,
-          content,
-          reference_id: referenceId,
-          read: false
-        })
-        .select()
-        .single();
+      const newNotification = {
+        id: `notification-${Date.now()}`,
+        user_id: currentUser.id,
+        type,
+        content,
+        reference_id: referenceId,
+        read: false,
+        created_at: new Date().toISOString()
+      };
 
-      if (error) throw error;
+      // Update local state
+      setNotifications(prev => [newNotification, ...prev]);
+      setUnreadCount(prev => prev + 1);
 
-      // Send OneSignal notification if user is subscribed
-      if (oneSignalUser.subscribed) {
-        await sendNotificationToUser(userId, getNotificationTitle(type), content, {
-          type,
-          reference_id: referenceId
-        });
-      }
-
-      return data;
+      return newNotification;
     } catch (error) {
       console.error('Error creating notification:', error);
       return null;
     }
-  }, [oneSignalUser.subscribed, sendNotificationToUser]);
+  }, [currentUser]);
 
   // Send browser notification (fallback)
   const sendBrowserNotification = useCallback((title: string, options?: NotificationOptions) => {
@@ -249,24 +213,6 @@ export function useEnhancedNotifications() {
   // Mark notification as read
   const markAsRead = useCallback(async (notificationId: string) => {
     try {
-      // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping mark as read');
-        return;
-      }
-      
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', notificationId);
-
-      if (error) throw error;
-
       setNotifications(prev =>
         prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
       );
@@ -281,25 +227,6 @@ export function useEnhancedNotifications() {
     if (!currentUser) return;
 
     try {
-      // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping mark all as read');
-        return;
-      }
-      
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('user_id', currentUser.id)
-        .eq('read', false);
-
-      if (error) throw error;
-
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
     } catch (error) {
@@ -310,24 +237,6 @@ export function useEnhancedNotifications() {
   // Delete notification
   const deleteNotification = useCallback(async (notificationId: string) => {
     try {
-      // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping delete notification');
-        return;
-      }
-      
-      const { error } = await supabase
-        .from('notifications')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('id', notificationId);
-
-      if (error) throw error;
-
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
       
       // Update unread count if needed
@@ -345,25 +254,6 @@ export function useEnhancedNotifications() {
     if (!currentUser) return;
 
     try {
-      // Check if notifications table exists
-      const { error: tableCheckError } = await supabase
-        .from('notifications')
-        .select('id')
-        .limit(1);
-      
-      if (tableCheckError) {
-        console.log('Notifications table does not exist yet, skipping clear all notifications');
-        return;
-      }
-      
-      const { error } = await supabase
-        .from('notifications')
-        .update({ deleted_at: new Date().toISOString() })
-        .eq('user_id', currentUser.id)
-        .is('deleted_at', null);
-
-      if (error) throw error;
-
       setNotifications([]);
       setUnreadCount(0);
     } catch (error) {
@@ -398,6 +288,19 @@ export function useEnhancedNotifications() {
     }
   }, [sendBrowserNotification, toast]);
 
+  // Update document title with unread count
+  useEffect(() => {
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount}) SocialChat`;
+    } else {
+      document.title = "SocialChat";
+    }
+    
+    return () => {
+      document.title = "SocialChat";
+    };
+  }, [unreadCount]);
+
   return {
     notifications,
     unreadCount,
@@ -412,24 +315,4 @@ export function useEnhancedNotifications() {
     fetchNotifications: () => currentUser && fetchNotifications(currentUser.id),
     oneSignalEnabled: oneSignalUser.subscribed
   };
-}
-
-// Helper function to get notification titles
-function getNotificationTitle(type: string): string {
-  switch (type) {
-    case 'message':
-      return 'New Message';
-    case 'friend_request':
-      return 'Friend Request';
-    case 'friend_accepted':
-      return 'Friend Request Accepted';
-    case 'like':
-      return 'New Like';
-    case 'comment':
-      return 'New Comment';
-    case 'system':
-      return '🎨 Customize Your Experience';
-    default:
-      return 'Notification';
-  }
 }
