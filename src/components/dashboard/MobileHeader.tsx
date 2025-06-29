@@ -306,7 +306,7 @@ export function MobileHeader() {
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="p-0 h-8 w-8 rounded-full hover-scale relative">
+              <Button variant="ghost" className="p-0 h-8 w-8 rounded-full hover-scale">
                 <Avatar className="h-8 w-8">
                   {user?.avatar ? (
                     <AvatarImage src={user.avatar} alt={user?.name} />
@@ -316,16 +316,6 @@ export function MobileHeader() {
                     </AvatarFallback>
                   )}
                 </Avatar>
-                {unreadCount > 0 && (
-                  <Badge 
-                    variant="destructive" 
-                    className={`absolute -top-1 -right-1 h-4 w-4 p-0 text-xs flex items-center justify-center animate-pulse ${
-                      isCrimson ? 'bg-red-600' : ''
-                    }`}
-                  >
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Badge>
-                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 animate-in slide-in-from-top-2 duration-200">
