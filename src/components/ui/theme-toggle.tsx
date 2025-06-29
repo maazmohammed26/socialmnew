@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { GradientText, GlowEffect } from '@/components/ui/crimson-effects';
 
 export function ThemeToggle() {
   const { theme, colorTheme, setTheme, setColorTheme, confirmThemeChange } = useTheme();
@@ -80,9 +81,15 @@ export function ThemeToggle() {
           onClick={() => handleThemeChange('crimson')}
           className={`h-8 w-8 ${theme === 'crimson' ? 'bg-background shadow-sm border-2 border-red-500' : ''} hover:bg-background/50 relative`}
         >
-          <Flame className="h-4 w-4" />
-          {theme !== 'crimson' && (
-            <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+          {theme === 'crimson' ? (
+            <GlowEffect color="red" intensity="medium">
+              <Flame className="h-4 w-4 text-red-600" />
+            </GlowEffect>
+          ) : (
+            <>
+              <Flame className="h-4 w-4" />
+              <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+            </>
           )}
           <span className="sr-only">Crimson Mode</span>
         </Button>
@@ -136,6 +143,21 @@ export function ThemeToggle() {
             <div className="w-3 h-3 rounded-full bg-purple-500 mr-2"></div>
             Purple Theme
           </DropdownMenuItem>
+          
+          {theme === 'crimson' && (
+            <>
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1.5">
+                <GradientText 
+                  gradientColors={['#dc2626', '#b91c1c']} 
+                  animated={true}
+                  className="text-xs"
+                >
+                  Crimson Theme Active
+                </GradientText>
+              </div>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

@@ -14,16 +14,23 @@
   --crimson-900: 0 63% 31%;
   --crimson-950: 0 75% 15%;
   
-  /* Accent colors */
+  /* Enhanced accent colors */
   --crimson-accent-1: 15 80% 50%;
   --crimson-accent-2: 340 80% 50%;
+  --crimson-accent-3: 30 90% 60%;
+  --crimson-accent-4: 350 75% 45%;
   
-  /* Shadows */
-  --crimson-shadow-sm: 0 1px 2px rgba(220, 38, 38, 0.05);
-  --crimson-shadow: 0 4px 6px -1px rgba(220, 38, 38, 0.1), 0 2px 4px -1px rgba(220, 38, 38, 0.06);
-  --crimson-shadow-md: 0 6px 10px -1px rgba(220, 38, 38, 0.1), 0 2px 4px -1px rgba(220, 38, 38, 0.06);
-  --crimson-shadow-lg: 0 10px 15px -3px rgba(220, 38, 38, 0.1), 0 4px 6px -2px rgba(220, 38, 38, 0.05);
-  --crimson-shadow-xl: 0 20px 25px -5px rgba(220, 38, 38, 0.1), 0 10px 10px -5px rgba(220, 38, 38, 0.04);
+  /* Enhanced Shadows */
+  --crimson-shadow-sm: 0 2px 4px rgba(220, 38, 38, 0.07);
+  --crimson-shadow: 0 4px 8px -1px rgba(220, 38, 38, 0.15), 0 2px 4px -1px rgba(220, 38, 38, 0.08);
+  --crimson-shadow-md: 0 8px 12px -1px rgba(220, 38, 38, 0.15), 0 3px 6px -1px rgba(220, 38, 38, 0.1);
+  --crimson-shadow-lg: 0 12px 18px -3px rgba(220, 38, 38, 0.15), 0 5px 8px -2px rgba(220, 38, 38, 0.1);
+  --crimson-shadow-xl: 0 24px 30px -5px rgba(220, 38, 38, 0.15), 0 12px 15px -5px rgba(220, 38, 38, 0.1);
+  
+  /* Glow effects */
+  --crimson-glow-sm: 0 0 8px rgba(220, 38, 38, 0.2);
+  --crimson-glow-md: 0 0 12px rgba(220, 38, 38, 0.3);
+  --crimson-glow-lg: 0 0 20px rgba(220, 38, 38, 0.4);
 }
 
 /* Crimson theme button styles */
@@ -33,12 +40,18 @@
   border-radius: 8px;
   font-weight: 500;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--crimson-shadow-sm);
 }
 
 .crimson .btn-primary:hover {
   background-color: hsl(0, 84%, 60%);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.2);
+  box-shadow: var(--crimson-shadow-md), var(--crimson-glow-sm);
+}
+
+.crimson .btn-primary:active {
+  transform: translateY(0);
+  box-shadow: var(--crimson-shadow-sm);
 }
 
 .crimson .btn-secondary {
@@ -53,21 +66,21 @@
 .crimson .btn-secondary:hover {
   background-color: hsl(0, 100%, 94%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
+  box-shadow: var(--crimson-shadow-sm);
 }
 
 /* Crimson theme card styles */
 .crimson .card {
   border-radius: 12px;
   border: 1px solid hsl(0, 100%, 94%);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--crimson-shadow-sm);
   overflow: hidden;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .crimson .card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 12px 28px rgba(220, 38, 38, 0.15);
+  box-shadow: var(--crimson-shadow-lg);
 }
 
 /* Crimson theme input styles */
@@ -97,7 +110,7 @@
 
 .crimson .avatar:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+  box-shadow: var(--crimson-shadow-sm), var(--crimson-glow-sm);
 }
 
 /* Crimson theme badge styles */
@@ -110,7 +123,7 @@
 /* Crimson theme toast styles */
 .crimson .toast {
   border-radius: 12px;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--crimson-shadow-lg);
   border-left: 4px solid hsl(0, 84%, 60%);
 }
 
@@ -118,14 +131,14 @@
 .crimson .dialog {
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--crimson-shadow-xl);
 }
 
 /* Crimson theme dropdown styles */
 .crimson .dropdown {
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--crimson-shadow-lg);
 }
 
 /* Crimson theme animations */
@@ -145,6 +158,24 @@
   to { transform: translateX(0); opacity: 1; }
 }
 
+@keyframes crimsonGlow {
+  0% { box-shadow: 0 0 5px rgba(220, 38, 38, 0.3); }
+  50% { box-shadow: 0 0 15px rgba(220, 38, 38, 0.5); }
+  100% { box-shadow: 0 0 5px rgba(220, 38, 38, 0.3); }
+}
+
+@keyframes crimsonBorderGlow {
+  0% { border-color: rgba(220, 38, 38, 0.3); }
+  50% { border-color: rgba(220, 38, 38, 0.8); }
+  100% { border-color: rgba(220, 38, 38, 0.3); }
+}
+
+@keyframes crimsonBackgroundShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 .crimson .animate-crimson-pulse {
   animation: crimsonPulse 2s infinite cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -155,6 +186,14 @@
 
 .crimson .animate-crimson-slide-in {
   animation: crimsonSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.crimson .animate-crimson-glow {
+  animation: crimsonGlow 2s infinite ease-in-out;
+}
+
+.crimson .animate-crimson-border-glow {
+  animation: crimsonBorderGlow 2s infinite ease-in-out;
 }
 
 /* Crimson theme scrollbar */
@@ -181,4 +220,259 @@
 .crimson *:focus-visible {
   outline: 2px solid hsla(0, 84%, 60%, 0.5);
   outline-offset: 2px;
+}
+
+/* Enhanced Crimson UI Components */
+
+/* Enhanced buttons */
+.crimson .button {
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.crimson .button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(120deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0) 70%);
+  transform: translateX(-100%);
+  transition: all 0.6s ease;
+}
+
+.crimson .button:hover::after {
+  transform: translateX(100%);
+}
+
+/* Enhanced cards */
+.crimson .card {
+  border-radius: 12px;
+  box-shadow: var(--crimson-shadow-sm);
+  border: 1px solid rgba(220, 38, 38, 0.1);
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .card.card-gradient {
+  background: linear-gradient(135deg, #fff 0%, #fff8f8 50%, #fff5f5 100%);
+}
+
+.crimson .card.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--crimson-shadow-lg);
+}
+
+/* Enhanced inputs */
+.crimson .input, 
+.crimson .textarea {
+  border-radius: 8px;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  transition: all 0.3s ease;
+}
+
+.crimson .input:focus, 
+.crimson .textarea:focus {
+  border-color: rgba(220, 38, 38, 0.5);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+/* Enhanced avatar */
+.crimson .avatar {
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.crimson .avatar:hover {
+  border-color: rgba(220, 38, 38, 0.3);
+  transform: scale(1.05);
+  box-shadow: var(--crimson-shadow-md);
+}
+
+.crimson .avatar.rounded-full {
+  border-radius: 9999px !important;
+}
+
+/* Enhanced badge */
+.crimson .badge {
+  border-radius: 6px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Enhanced toast */
+.crimson .toast {
+  border-radius: 12px;
+  box-shadow: var(--crimson-shadow-lg);
+  border-left: 4px solid hsl(0, 84%, 60%);
+}
+
+/* Enhanced dialog */
+.crimson .dialog {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--crimson-shadow-xl);
+}
+
+/* Enhanced dropdown */
+.crimson .dropdown {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--crimson-shadow-lg);
+}
+
+/* Enhanced message bubbles */
+.crimson .message-bubble-sent {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+  border-radius: 16px !important;
+  border-top-right-radius: 4px !important;
+  box-shadow: var(--crimson-shadow-sm);
+  padding: 10px 14px !important;
+}
+
+.crimson .message-bubble-received {
+  background: linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%);
+  border-radius: 16px !important;
+  border-top-left-radius: 4px !important;
+  box-shadow: var(--crimson-shadow-sm);
+  padding: 10px 14px !important;
+}
+
+/* Enhanced social gradient */
+.crimson .social-gradient {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%);
+  background-size: 200% 200%;
+  animation: crimsonBackgroundShift 3s ease infinite;
+}
+
+/* Enhanced button gradient */
+.crimson .btn-gradient {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+  transition: all 0.3s ease;
+}
+
+.crimson .btn-gradient:hover {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  box-shadow: var(--crimson-shadow-md), var(--crimson-glow-sm);
+}
+
+/* Enhanced hover effects */
+.crimson .hover-scale {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.crimson .hover-scale:hover {
+  transform: scale(1.03);
+  box-shadow: var(--crimson-shadow-md);
+}
+
+/* Enhanced notification highlight */
+.crimson .notification-highlight {
+  position: relative;
+  overflow: hidden;
+}
+
+.crimson .notification-highlight::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(45deg, rgba(220, 38, 38, 0.05), rgba(239, 68, 68, 0.1));
+  z-index: -1;
+}
+
+/* Enhanced story view indicators */
+.crimson .story-unviewed {
+  border-color: #dc2626;
+  position: relative;
+}
+
+.crimson .story-unviewed::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  background-color: #dc2626;
+  border-radius: 50%;
+  border: 2px solid white;
+  animation: crimsonPulse 2s infinite;
+}
+
+/* Enhanced story border animations */
+.crimson .story-unseen-border {
+  background: linear-gradient(-45deg, #dc2626, #b91c1c, #991b1b, #7f1d1d);
+  background-size: 400% 400%;
+  animation: crimsonBackgroundShift 3s ease infinite;
+}
+
+/* Enhanced glass card effect */
+.crimson .glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(220, 38, 38, 0.1);
+  box-shadow: var(--crimson-shadow-md);
+}
+
+/* Enhanced nav tabs */
+.crimson .nav-tab {
+  position: relative;
+  overflow: hidden;
+}
+
+.crimson .nav-tab[data-state=active]::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #dc2626, #ef4444);
+}
+
+/* Enhanced loading indicators */
+.crimson .loading-indicator {
+  border-color: rgba(220, 38, 38, 0.1);
+  border-top-color: #dc2626;
+}
+
+/* Micro-interactions */
+.crimson .micro-interaction {
+  position: relative;
+  overflow: hidden;
+}
+
+.crimson .micro-interaction::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(120deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 70%);
+  transform: translateX(-100%);
+  transition: all 0.6s ease;
+}
+
+.crimson .micro-interaction:hover::after {
+  transform: translateX(100%);
+}
+
+/* Enhanced dev banner */
+.crimson .dev-banner {
+  background: linear-gradient(90deg, #fee2e2, #fecaca);
+  color: #b91c1c;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
