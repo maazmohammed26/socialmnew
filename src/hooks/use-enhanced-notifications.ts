@@ -19,7 +19,7 @@ export function useEnhancedNotifications() {
   const [isGranted, setIsGranted] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [hasShownSystemNotification, setHasShownSystemNotification] = useState(false);
+  const [hasShownSystemNotification, setHasShownSystemNotification] = useState(true); // Set to true to prevent showing
   const { toast } = useToast();
   const { oneSignalUser, sendNotificationToUser } = useOneSignalNotifications();
 
@@ -39,18 +39,6 @@ export function useEnhancedNotifications() {
           
           // Load initial notifications
           await fetchNotifications(user.id);
-
-          // Show system notification about theme customization (only once per session)
-          const hasShownKey = `system_notification_shown_${user.id}`;
-          const hasShown = sessionStorage.getItem(hasShownKey);
-          
-          if (!hasShown && !hasShownSystemNotification) {
-            setTimeout(() => {
-              createSystemNotification(user.id);
-              setHasShownSystemNotification(true);
-              sessionStorage.setItem(hasShownKey, 'true');
-            }, 3000); // Show after 3 seconds
-          }
         }
       } catch (error) {
         console.error('Error initializing notifications:', error);
@@ -85,14 +73,6 @@ export function useEnhancedNotifications() {
       // Create sample notifications
       const sampleNotifications = [
         {
-          id: 'theme-tip',
-          user_id: userId,
-          type: 'system',
-          content: "🎨 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!",
-          read: false,
-          created_at: new Date().toISOString(),
-        },
-        {
           id: 'founder-message',
           user_id: userId,
           type: 'system',
@@ -103,16 +83,7 @@ export function useEnhancedNotifications() {
       ];
       
       setNotifications(sampleNotifications);
-      setUnreadCount(2);
-
-      // Show toast notification with highlight
-      toast({
-        title: '🎨 Customize Your Experience',
-        description: "Don't like the pixel font? Change themes in your Profile section!",
-        duration: 8000,
-        className: 'border-l-4 border-l-blue-500 bg-blue-50 text-blue-900 shadow-lg animate-pulse',
-      });
-
+      setUnreadCount(1);
     } catch (error) {
       console.error('Error creating system notification:', error);
     }
@@ -124,14 +95,6 @@ export function useEnhancedNotifications() {
       // Create sample notifications
       const sampleNotifications = [
         {
-          id: 'theme-tip',
-          user_id: userId,
-          type: 'system',
-          content: "🎨 Don't like the pixel font? Visit your Profile section to change themes and customize fonts & colors to your preference!",
-          read: false,
-          created_at: new Date().toISOString(),
-        },
-        {
           id: 'founder-message',
           user_id: userId,
           type: 'system',
@@ -142,7 +105,7 @@ export function useEnhancedNotifications() {
       ];
       
       setNotifications(sampleNotifications);
-      setUnreadCount(2);
+      setUnreadCount(1);
     } catch (error) {
       console.error('Error fetching notifications:', error);
       setNotifications([]);
