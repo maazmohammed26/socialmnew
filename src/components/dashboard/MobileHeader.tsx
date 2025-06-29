@@ -16,8 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useNotifications } from '@/hooks/use-notifications';
-import { NotificationBadge } from '@/components/notifications/NotificationBadge';
+import { useEnhancedNotifications } from '@/hooks/use-enhanced-notifications';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,8 +47,9 @@ export function MobileHeader() {
   const [user, setUser] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const { toast } = useToast();
-  const { unreadCount } = useNotifications();
+  const { unreadCount: notificationCount } = useEnhancedNotifications();
   
   // Check if we're in crimson theme
   const [isCrimson, setIsCrimson] = useState(false);
@@ -76,6 +76,10 @@ export function MobileHeader() {
     
     return () => observer.disconnect();
   }, []);
+  
+  useEffect(() => {
+    setUnreadCount(notificationCount);
+  }, [notificationCount]);
 
   useEffect(() => {
     async function getUserProfile() {
@@ -171,7 +175,14 @@ export function MobileHeader() {
       icon: (
         <div className="relative">
           <Bell className="h-5 w-5" />
-          <NotificationBadge count={unreadCount} />
+          {unreadCount > 0 && (
+            <Badge 
+              variant="destructive" 
+              className="absolute -top-2 -right-2 h-4 w-4 p-0 text-xs flex items-center justify-center animate-pulse"
+            >
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </Badge>
+          )}
         </div>
       )
     },
@@ -305,7 +316,16 @@ export function MobileHeader() {
                     </AvatarFallback>
                   )}
                 </Avatar>
-                <NotificationBadge count={unreadCount} />
+                {unreadCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className={`absolute -top-1 -right-1 h-4 w-4 p-0 text-xs flex items-center justify-center animate-pulse ${
+                      isCrimson ? 'bg-red-600' : ''
+                    }`}
+                  >
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Badge>
+                )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56 animate-in slide-in-from-top-2 duration-200">
@@ -343,7 +363,7 @@ export function MobileHeader() {
         </div>
         
         {/* Bottom Navigation - Icons Only */}
-        <nav className="fixed bottom-0 left-0 right-0 grid grid-cols-6 border-t bg-background z-50">
+        <nav className="grid grid-cols-6 border-t bg-background">
           {tabs.map((tab) => (
             <div
               key={tab.path} 
