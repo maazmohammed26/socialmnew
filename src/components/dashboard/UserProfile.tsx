@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Users, MessageCircle, Bell, Shield, Calendar, Link, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -51,7 +51,7 @@ interface UserActivity {
 }
 
 export default function UserProfile() {
-  const [user, setUser] = useState<UserProfileData | null>(null);
+  const [userData, setUserData] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -101,14 +101,16 @@ export default function UserProfile() {
 
   useEffect(() => {
     fetchUserProfile();
-    fetchRecentActivity();
-    fetchUserPosts();
   }, []);
 
   const fetchUserProfile = async () => {
     try {
+      setLoading(true);
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
+      if (!authUser) {
+        setLoading(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from('profiles')
@@ -119,7 +121,7 @@ export default function UserProfile() {
       if (error) throw error;
 
       if (data) {
-        setUser(data);
+        setUserData(data);
         setEditForm({
           name: data.name || '',
           username: data.username || '',
@@ -135,6 +137,10 @@ export default function UserProfile() {
           month: 'long',
           day: 'numeric'
         }));
+        
+        // After profile is loaded, fetch activity and posts
+        fetchRecentActivity(authUser.id);
+        fetchUserPosts(authUser.id);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -148,16 +154,13 @@ export default function UserProfile() {
     }
   };
   
-  const fetchRecentActivity = async () => {
+  const fetchRecentActivity = async (userId: string) => {
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-      
       // Get recent posts
       const { data: recentPosts } = await supabase
         .from('posts')
         .select('id, content, created_at')
-        .eq('user_id', authUser.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(5);
         
@@ -165,7 +168,7 @@ export default function UserProfile() {
       const { data: recentComments } = await supabase
         .from('comments')
         .select('id, content, post_id, created_at')
-        .eq('user_id', authUser.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(3);
         
@@ -178,7 +181,7 @@ export default function UserProfile() {
           profiles:sender_id!inner(name),
           profiles2:receiver_id!inner(name)
         `)
-        .or(`sender_id.eq.${authUser.id},receiver_id.eq.${authUser.id}`)
+        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .eq('status', 'accepted')
         .order('created_at', { ascending: false })
         .limit(3);
@@ -210,7 +213,7 @@ export default function UserProfile() {
       
       if (recentFriends) {
         recentFriends.forEach(friend => {
-          const friendName = friend.sender_id === authUser.id ? friend.profiles2.name : friend.profiles.name;
+          const friendName = friend.sender_id === userId ? friend.profiles2.name : friend.profiles.name;
           activities.push({
             type: 'friend',
             content: `You became friends with ${friendName}`,
@@ -228,11 +231,8 @@ export default function UserProfile() {
     }
   };
   
-  const fetchUserPosts = async () => {
+  const fetchUserPosts = async (userId: string) => {
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-      
       const { data, error } = await supabase
         .from('posts')
         .select(`
@@ -242,7 +242,7 @@ export default function UserProfile() {
           created_at,
           updated_at
         `)
-        .eq('user_id', authUser.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(10);
         
@@ -256,13 +256,13 @@ export default function UserProfile() {
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !user) return;
+    if (!file || !userData) return;
 
     try {
       setIsUploadingAvatar(true);
 
       const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+      const fileName = `${userData.id}-${Math.random()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -278,7 +278,7 @@ export default function UserProfile() {
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ avatar: data.publicUrl })
-        .eq('id', user.id);
+        .eq('id', userData.id);
 
       if (updateError) throw updateError;
 
@@ -359,7 +359,7 @@ export default function UserProfile() {
     );
   }
 
-  if (!user) {
+  if (!userData) {
     return (
       <div className="max-w-2xl mx-auto text-center py-8">
         <p className="text-muted-foreground font-pixelated text-sm">Profile not found</p>
@@ -392,11 +392,11 @@ export default function UserProfile() {
                   className="w-24 h-24 mx-auto mb-2 border-4 border-social-green/20 cursor-pointer hover:scale-105 transition-transform"
                   onClick={() => setShowAvatarViewer(true)}
                 >
-                  {user?.avatar ? (
-                    <AvatarImage src={user.avatar} alt={user.name} />
+                  {userData?.avatar ? (
+                    <AvatarImage src={userData.avatar} alt={userData.name} />
                   ) : (
                     <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-xl">
-                      {user?.name ? user.name.substring(0, 2).toUpperCase() : 'U'}
+                      {userData?.name ? userData.name.substring(0, 2).toUpperCase() : 'U'}
                     </AvatarFallback>
                   )}
                 </Avatar>
@@ -423,42 +423,42 @@ export default function UserProfile() {
                   <CardTitle className="font-pixelated text-xl text-foreground mb-1">
                     {isCrimson ? (
                       <GradientText gradientColors={['#dc2626', '#b91c1c']}>
-                        {user?.name}
+                        {userData?.name}
                       </GradientText>
                     ) : (
-                      user?.name
+                      userData?.name
                     )}
                   </CardTitle>
                   <p className="text-sm text-muted-foreground font-pixelated mb-1">
-                    @{user?.username}
+                    @{userData?.username}
                   </p>
                   
                   {/* Bio */}
-                  {user.bio && (
+                  {userData.bio && (
                     <p className="text-sm text-muted-foreground font-pixelated mt-3 mb-2 max-w-md mx-auto">
-                      {user.bio}
+                      {userData.bio}
                     </p>
                   )}
                   
                   {/* Location and Website */}
                   <div className="flex items-center justify-center gap-4 mt-2 mb-3">
-                    {user.location && (
+                    {userData.location && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground font-pixelated">
                         <MapPin className="h-3 w-3" />
-                        <span>{user.location}</span>
+                        <span>{userData.location}</span>
                       </div>
                     )}
                     
-                    {user.website && (
+                    {userData.website && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground font-pixelated">
                         <Link className="h-3 w-3" />
                         <a 
-                          href={user.website.startsWith('http') ? user.website : `https://${user.website}`}
+                          href={userData.website.startsWith('http') ? userData.website : `https://${userData.website}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="hover:underline hover:text-social-green"
                         >
-                          {user.website.replace(/^https?:\/\//, '')}
+                          {userData.website.replace(/^https?:\/\//, '')}
                         </a>
                       </div>
                     )}
@@ -733,7 +733,7 @@ export default function UserProfile() {
           <Card className="card-gradient">
             <CardContent className="p-4">
               <h3 className="font-pixelated text-sm font-medium mb-3 flex items-center gap-2">
-                <User className="h-4 w-4" />
+                <Shield className="h-4 w-4" />
                 Account Settings
               </h3>
               
@@ -794,15 +794,15 @@ export default function UserProfile() {
           <DialogHeader className="absolute top-4 left-4 right-4 z-10 flex flex-row items-center justify-between space-y-0">
             <DialogTitle className="text-white font-pixelated text-sm flex items-center gap-2">
               <Avatar className="w-8 h-8 border border-white">
-                {user.avatar ? (
-                  <AvatarImage src={user.avatar} alt={user.name} />
+                {userData.avatar ? (
+                  <AvatarImage src={userData.avatar} alt={userData.name} />
                 ) : (
                   <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-xs">
-                    {user.name?.substring(0, 2).toUpperCase() || 'U'}
+                    {userData.name?.substring(0, 2).toUpperCase() || 'U'}
                   </AvatarFallback>
                 )}
               </Avatar>
-              {user.name}
+              {userData.name}
             </DialogTitle>
             <Button
               onClick={() => setShowAvatarViewer(false)}
@@ -817,16 +817,16 @@ export default function UserProfile() {
           <div className="relative w-full h-[500px] flex flex-col">
             {/* Profile Picture */}
             <div className="flex-1 flex items-center justify-center p-4">
-              {user.avatar ? (
+              {userData.avatar ? (
                 <img
-                  src={user.avatar}
-                  alt={`${user.name}'s profile picture`}
+                  src={userData.avatar}
+                  alt={`${userData.name}'s profile picture`}
                   className="max-w-full max-h-full object-contain rounded-lg"
                 />
               ) : (
                 <div className="w-64 h-64 rounded-full bg-social-dark-green flex items-center justify-center">
                   <span className="text-white font-pixelated text-4xl">
-                    {user.name?.substring(0, 2).toUpperCase() || 'U'}
+                    {userData.name?.substring(0, 2).toUpperCase() || 'U'}
                   </span>
                 </div>
               )}
