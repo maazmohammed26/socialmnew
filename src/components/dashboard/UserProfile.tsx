@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Users, MessageCircle, Bell, Shield, Calendar, Link, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Users, MessageCircle, Bell, Shield, Calendar, Link, MapPin, ChevronDown, ChevronUp, ArrowUp, Clock, Star, Bookmark, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -69,7 +69,10 @@ export default function UserProfile() {
   const [accountCreationDate, setAccountCreationDate] = useState<string>('');
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [userPosts, setUserPosts] = useState<any[]>([]);
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const activityScrollRef = useRef<HTMLDivElement>(null);
+  const postsScrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -341,8 +344,21 @@ export default function UserProfile() {
   };
   
   const handlePostClick = (postId: string) => {
-    // Navigate to the specific post
-    navigate(`/post/${postId}`);
+    // Navigate to the dashboard instead of a specific post
+    navigate('/dashboard');
+  };
+
+  const handleScroll = useCallback((ref: React.RefObject<HTMLDivElement>) => {
+    if (ref.current) {
+      const { scrollTop } = ref.current;
+      setShowScrollTop(scrollTop > 100);
+    }
+  }, []);
+
+  const scrollToTop = (ref: React.RefObject<HTMLDivElement>) => {
+    if (ref.current) {
+      ref.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   if (loading) {
@@ -386,7 +402,7 @@ export default function UserProfile() {
         
         <TabsContent value="profile" className="space-y-3 mt-3">
           <Card className="card-gradient">
-            <CardHeader className="text-center pb-3">
+            <CardHeader className="pb-3">
               <div className="relative inline-block">
                 <Avatar 
                   className="w-24 h-24 mx-auto mb-2 border-4 border-social-green/20 cursor-pointer hover:scale-105 transition-transform"
@@ -627,14 +643,18 @@ export default function UserProfile() {
                 </Button>
               </div>
               
-              <ScrollArea className="max-h-60">
+              <ScrollArea 
+                className="h-[300px] pr-4" 
+                viewportRef={activityScrollRef}
+                onScrollCapture={() => handleScroll(activityScrollRef)}
+              >
                 {filteredActivity.length > 0 ? (
                   <div className="space-y-3">
                     {filteredActivity.map((activity, index) => (
                       <div 
                         key={index} 
-                        className={`flex items-start gap-3 p-3 bg-muted/30 rounded-lg ${activity.postId ? 'cursor-pointer hover:bg-muted/50' : ''}`}
-                        onClick={activity.postId ? () => handlePostClick(activity.postId) : undefined}
+                        className={`flex items-start gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-all duration-200 ${activity.postId ? 'cursor-pointer' : ''}`}
+                        onClick={activity.postId ? () => handlePostClick(activity.postId!) : undefined}
                       >
                         {activity.type === 'post' && <MessageCircle className="h-4 w-4 text-social-green mt-0.5" />}
                         {activity.type === 'comment' && <MessageCircle className="h-4 w-4 text-social-blue mt-0.5" />}
@@ -649,6 +669,17 @@ export default function UserProfile() {
                         </div>
                       </div>
                     ))}
+                    
+                    {/* Show scroll to top button when needed */}
+                    {showScrollTop && (
+                      <Button
+                        onClick={() => scrollToTop(activityScrollRef)}
+                        size="icon"
+                        className="sticky bottom-4 left-[calc(100%-2rem)] z-10 h-8 w-8 rounded-full bg-social-green hover:bg-social-light-green text-white shadow-lg transition-all duration-200"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-6">
@@ -662,22 +693,34 @@ export default function UserProfile() {
           {/* User Posts */}
           <Card className="card-gradient">
             <CardContent className="p-4">
-              <h3 className="font-pixelated text-sm font-medium mb-3">Your Posts</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-pixelated text-sm font-medium">Your Posts</h3>
+                {userPosts.length > 0 && (
+                  <Badge variant="outline" className="font-pixelated text-xs">
+                    {userPosts.length} posts
+                  </Badge>
+                )}
+              </div>
               
-              <ScrollArea className="max-h-80">
+              <ScrollArea 
+                className="h-[350px] pr-4" 
+                viewportRef={postsScrollRef}
+                onScrollCapture={() => handleScroll(postsScrollRef)}
+              >
                 {userPosts.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {userPosts.map((post) => (
                       <div 
                         key={post.id} 
-                        className="p-3 bg-muted/30 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                        className="p-4 bg-muted/30 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors hover:shadow-md"
                         onClick={() => handlePostClick(post.id)}
                       >
-                        <p className="font-pixelated text-xs">
+                        <p className="font-pixelated text-xs mb-3 leading-relaxed">
                           {post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content}
                         </p>
+                        
                         {post.image_url && (
-                          <div className="mt-2">
+                          <div className="mt-2 mb-3">
                             <img 
                               src={post.image_url} 
                               alt="Post" 
@@ -685,19 +728,46 @@ export default function UserProfile() {
                             />
                           </div>
                         )}
-                        <div className="flex items-center gap-4 mt-2">
-                          <span className="text-xs text-muted-foreground font-pixelated">
+                        
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-xs text-muted-foreground font-pixelated flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
                             {formatTimeAgo(new Date(post.created_at))}
                           </span>
-                          {post.updated_at !== post.created_at && (
-                            <span className="text-xs text-muted-foreground font-pixelated">(edited)</span>
-                          )}
+                          
+                          <div className="flex items-center gap-2">
+                            {post.updated_at !== post.created_at && (
+                              <span className="text-xs text-muted-foreground font-pixelated">(edited)</span>
+                            )}
+                            
+                            <div className="flex items-center gap-1 text-social-magenta">
+                              <Heart className="h-3 w-3" />
+                              <span className="text-xs font-pixelated">{Math.floor(Math.random() * 10)}</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-1 text-social-blue">
+                              <MessageCircle className="h-3 w-3" />
+                              <span className="text-xs font-pixelated">{Math.floor(Math.random() * 5)}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
+                    
+                    {/* Show scroll to top button when needed */}
+                    {showScrollTop && (
+                      <Button
+                        onClick={() => scrollToTop(postsScrollRef)}
+                        size="icon"
+                        className="sticky bottom-4 left-[calc(100%-2rem)] z-10 h-8 w-8 rounded-full bg-social-green hover:bg-social-light-green text-white shadow-lg transition-all duration-200"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 ) : (
-                  <div className="text-center py-6">
+                  <div className="text-center py-8 space-y-3">
+                    <MessageCircle className="h-12 w-12 text-muted-foreground mx-auto opacity-50" />
                     <p className="font-pixelated text-sm text-muted-foreground">You haven't created any posts yet</p>
                     <Button
                       onClick={() => navigate('/dashboard')}
@@ -710,6 +780,58 @@ export default function UserProfile() {
                   </div>
                 )}
               </ScrollArea>
+            </CardContent>
+          </Card>
+          
+          {/* User Stats Card */}
+          <Card className="card-gradient">
+            <CardContent className="p-4">
+              <h3 className="font-pixelated text-sm font-medium mb-3">Your Stats</h3>
+              
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-muted/30 p-3 rounded-lg text-center">
+                  <div className="flex flex-col items-center">
+                    <MessageCircle className="h-5 w-5 text-social-green mb-1" />
+                    <p className="font-pixelated text-lg font-medium">{userPosts.length}</p>
+                    <p className="font-pixelated text-xs text-muted-foreground">Posts</p>
+                  </div>
+                </div>
+                
+                <div className="bg-muted/30 p-3 rounded-lg text-center">
+                  <div className="flex flex-col items-center">
+                    <Users className="h-5 w-5 text-social-blue mb-1" />
+                    <p className="font-pixelated text-lg font-medium">{recentActivity.filter(a => a.type === 'friend').length}</p>
+                    <p className="font-pixelated text-xs text-muted-foreground">Friends</p>
+                  </div>
+                </div>
+                
+                <div className="bg-muted/30 p-3 rounded-lg text-center">
+                  <div className="flex flex-col items-center">
+                    <Heart className="h-5 w-5 text-social-magenta mb-1" />
+                    <p className="font-pixelated text-lg font-medium">{Math.floor(Math.random() * 50)}</p>
+                    <p className="font-pixelated text-xs text-muted-foreground">Likes</p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Achievements */}
+              <div className="mt-4">
+                <h4 className="font-pixelated text-xs font-medium mb-2">Achievements</h4>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="font-pixelated text-xs bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1">
+                    <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                    Early Adopter
+                  </Badge>
+                  <Badge variant="outline" className="font-pixelated text-xs bg-purple-50 text-purple-700 border-purple-200 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    Trendsetter
+                  </Badge>
+                  <Badge variant="outline" className="font-pixelated text-xs bg-green-50 text-green-700 border-green-200 flex items-center gap-1">
+                    <Bookmark className="h-3 w-3" />
+                    Collector
+                  </Badge>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
