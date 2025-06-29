@@ -4,7 +4,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -577,11 +578,11 @@ export default function UserProfile() {
                   
                   <div className="space-y-1">
                     <Label htmlFor="bio" className="text-xs font-pixelated">Bio</Label>
-                    <Input
+                    <Textarea
                       id="bio"
                       value={editForm.bio}
                       onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                      className="font-pixelated text-xs h-8"
+                      className="font-pixelated text-xs min-h-[80px]"
                       placeholder="Tell us about yourself"
                     />
                   </div>
@@ -972,22 +973,4 @@ function formatTimeAgo(date: Date): string {
   
   const diffInYears = Math.floor(diffInDays / 365);
   return `${diffInYears} year${diffInYears !== 1 ? 's' : ''} ago`;
-}
-
-function MapPin({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-      <circle cx="12" cy="10" r="3" />
-    </svg>
-  );
 }

@@ -926,30 +926,30 @@ export function Friends() {
             </ScrollArea>
           </TabsContent>
         </Tabs>
-      </div>
 
-      {/* Remove Friend Confirmation Dialog */}
-      <AlertDialog open={showRemoveDialog.show} onOpenChange={(open) => setShowRemoveDialog({show: open, friend: showRemoveDialog.friend})}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="font-pixelated">Remove Friend</AlertDialogTitle>
-            <AlertDialogDescription className="font-pixelated text-xs">
-              Are you sure you want to remove {showRemoveDialog.friend?.name} from your friends list? 
-              You'll need to send a new friend request if you want to connect again.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="font-pixelated text-xs">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleRemoveFriend}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
-              disabled={!!removingFriend}
-            >
-              {removingFriend ? 'Removing...' : 'Remove'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        {/* Remove Friend Confirmation Dialog */}
+        <AlertDialog open={showRemoveDialog.show} onOpenChange={(open) => setShowRemoveDialog({show: open, friend: showRemoveDialog.friend})}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="font-pixelated">Remove Friend</AlertDialogTitle>
+              <AlertDialogDescription className="font-pixelated text-xs">
+                Are you sure you want to remove {showRemoveDialog.friend?.name} from your friends list? 
+                You'll need to send a new friend request if you want to connect again.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="font-pixelated text-xs">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleRemoveFriend}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
+                disabled={!!removingFriend}
+              >
+                {removingFriend ? 'Removing...' : 'Remove'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </DashboardLayout>
   );
 }
