@@ -16,22 +16,20 @@ import {
   X, 
   AlertTriangle, 
   Search, 
+  Star, 
+  Tag, 
   Filter, 
+  LayoutGrid, 
+  List, 
   SortAsc, 
   SortDesc, 
-  RefreshCw,
-  UserX,
-  Check,
-  Star,
-  Heart,
-  Bell,
-  Share2,
-  MoreHorizontal,
-  Zap,
-  Bookmark,
-  Tag,
-  Shield,
-  Info
+  Heart, 
+  Bell, 
+  BellOff, 
+  Pencil, 
+  Trash, 
+  Plus, 
+  Settings 
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -50,7 +48,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { GradientText, GlowEffect } from '@/components/ui/crimson-effects';
 import { CrimsonSearchInput } from '@/components/ui/crimson-input';
-import { UserSearch } from '@/components/dashboard/UserSearch';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,10 +63,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
-  DropdownMenuGroup,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
@@ -69,16 +72,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { UserProfileDialog } from '@/components/user/UserProfileDialog';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { UserSearch } from '@/components/dashboard/UserSearch';
 
 interface Friend {
   id: string;
@@ -90,12 +84,12 @@ interface Friend {
   friend_id?: string;
   sender_id?: string;
   receiver_id?: string;
-  last_interaction?: string;
-  favorite?: boolean;
+  isFavorite?: boolean;
   tags?: string[];
-  notes?: string;
-  online_status?: 'online' | 'offline' | 'away' | 'busy';
-  last_seen?: string;
+  lastActive?: string;
+  isOnline?: boolean;
+  note?: string;
+  notificationsEnabled?: boolean;
 }
 
 interface SearchResult {
@@ -106,7 +100,6 @@ interface SearchResult {
   created_at: string;
   isFriend: boolean;
   isPending: boolean;
-  mutualFriends?: number;
 }
 
 interface FriendTag {
@@ -128,24 +121,24 @@ export function Friends() {
   const [removingFriend, setRemovingFriend] = useState<string | null>(null);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('friends');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [sortBy, setSortBy] = useState<'name' | 'date' | 'activity'>('activity');
-  const [filterFavorites, setFilterFavorites] = useState(false);
-  const [filterTags, setFilterTags] = useState<string[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any>(null);
-  const [showUserDialog, setShowUserDialog] = useState(false);
-  const [friendTags, setFriendTags] = useState<FriendTag[]>([
-    { id: '1', name: 'Close Friends', color: '#22c55e' },
-    { id: '2', name: 'Work', color: '#3b82f6' },
-    { id: '3', name: 'Family', color: '#ec4899' },
-    { id: '4', name: 'School', color: '#f59e0b' }
-  ]);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [sortOption, setSortOption] = useState<'name' | 'recent' | 'activity'>('recent');
+  const [filterOptions, setFilterOptions] = useState<{
+    favorites: boolean;
+    online: boolean;
+    tags: string[];
+  }>({
+    favorites: false,
+    online: false,
+    tags: []
+  });
+  const [friendTags, setFriendTags] = useState<FriendTag[]>([]);
+  const [showTagDialog, setShowTagDialog] = useState(false);
+  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
+  const [showNoteDialog, setShowNoteDialog] = useState(false);
+  const [noteText, setNoteText] = useState('');
   const [showTagsDialog, setShowTagsDialog] = useState(false);
-  const [showNotesDialog, setShowNotesDialog] = useState<{show: boolean, friend: Friend | null}>({show: false, friend: null});
-  const [friendNote, setFriendNote] = useState('');
-  const [showInfoDialog, setShowInfoDialog] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -184,6 +177,7 @@ export function Friends() {
       fetchFriends();
       fetchFriendRequests();
       fetchSuggestedFriends();
+      fetchFriendTags();
       
       // Set up real-time subscriptions with enhanced error handling
       const friendsChannel = supabase
@@ -202,21 +196,8 @@ export function Friends() {
         )
         .subscribe();
 
-      // Subscribe to favorite_friends changes
-      const favoritesChannel = supabase
-        .channel('favorites-realtime')
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'favorite_friends' },
-          (payload) => {
-            console.log('Favorites change detected:', payload);
-            fetchFriends();
-          }
-        )
-        .subscribe();
-
       return () => {
         supabase.removeChannel(friendsChannel);
-        supabase.removeChannel(favoritesChannel);
       };
     }
   }, [currentUser]);
@@ -259,8 +240,44 @@ export function Friends() {
 
       console.log('Raw friends data:', data);
 
-      // Get last interaction data for each friend
-      const friendsList = await Promise.all((data || []).map(async friendship => {
+      // Get favorite friends
+      const { data: favoritesData } = await supabase
+        .from('favorite_friends')
+        .select('friend_id')
+        .eq('user_id', currentUser.id);
+      
+      const favoriteIds = new Set((favoritesData || []).map(f => f.friend_id));
+      
+      // Get friend notes
+      const { data: notesData } = await supabase
+        .from('friend_notes')
+        .select('friend_id, note')
+        .eq('user_id', currentUser.id);
+        
+      const notesMap = (notesData || []).reduce((map, item) => {
+        map[item.friend_id] = item.note;
+        return map;
+      }, {});
+      
+      // Get friend tag assignments
+      const { data: tagAssignmentsData } = await supabase
+        .from('friend_tag_assignments')
+        .select(`
+          friend_id,
+          tag_id,
+          friend_tags:tag_id(name)
+        `)
+        .eq('user_id', currentUser.id);
+        
+      const tagsMap = {};
+      (tagAssignmentsData || []).forEach(assignment => {
+        if (!tagsMap[assignment.friend_id]) {
+          tagsMap[assignment.friend_id] = [];
+        }
+        tagsMap[assignment.friend_id].push(assignment.friend_tags.name);
+      });
+
+      const friendsList = data?.map(friendship => {
         const isCurrentUserSender = friendship.sender_id === currentUser.id;
         const friendProfile = isCurrentUserSender 
           ? friendship.receiver_profile 
@@ -268,36 +285,12 @@ export function Friends() {
         
         const friendId = friendProfile.id;
         
-        // Get last message between users
-        const { data: lastMessage } = await supabase
-          .from('messages')
-          .select('created_at')
-          .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${currentUser.id})`)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
+        // Simulate online status and last active time
+        const isOnline = friendId.charAt(0) < 'd';
+        const lastActive = isOnline ? 'now' : `${Math.floor(Math.random() * 24) + 1}h ago`;
         
-        // Check if friend is favorited
-        const { data: favoriteData } = await supabase
-          .from('favorite_friends')
-          .select('id')
-          .eq('user_id', currentUser.id)
-          .eq('friend_id', friendId)
-          .maybeSingle();
-          
-        // Get friend tags (simulated for now)
-        const tags = [];
-        if (friendId.charAt(0) < 'c') tags.push('1'); // Close Friends
-        if (friendId.charAt(1) > 'f') tags.push('2'); // Work
-        if (friendId.charAt(2) < '5') tags.push('3'); // Family
-        if (friendId.charAt(3) > '7') tags.push('4'); // School
-        
-        // Simulate online status
-        const randomStatus = Math.random();
-        let onlineStatus: 'online' | 'offline' | 'away' | 'busy' = 'offline';
-        if (randomStatus < 0.3) onlineStatus = 'online';
-        else if (randomStatus < 0.5) onlineStatus = 'away';
-        else if (randomStatus < 0.6) onlineStatus = 'busy';
+        // Simulate notification settings
+        const notificationsEnabled = friendId.charAt(1) > 'c';
         
         return {
           id: friendProfile.id,
@@ -309,17 +302,20 @@ export function Friends() {
           friend_id: friendship.id,
           sender_id: friendship.sender_id,
           receiver_id: friendship.receiver_id,
-          last_interaction: lastMessage?.created_at || friendship.created_at,
-          favorite: !!favoriteData,
-          tags,
-          notes: friendId.charAt(0) < 'd' ? 'Met through work conference' : undefined,
-          online_status: onlineStatus,
-          last_seen: new Date(Date.now() - Math.random() * 86400000 * 3).toISOString()
+          isFavorite: favoriteIds.has(friendProfile.id),
+          tags: tagsMap[friendProfile.id] || [],
+          note: notesMap[friendProfile.id] || '',
+          isOnline,
+          lastActive,
+          notificationsEnabled
         };
-      }));
+      }) || [];
 
       console.log('Processed friends list:', friendsList);
-      setFriends(friendsList);
+      
+      // Sort friends based on the selected option
+      const sortedFriends = sortFriends(friendsList, sortOption);
+      setFriends(sortedFriends);
     } catch (error) {
       console.error('Error fetching friends:', error);
       setFriends([]);
@@ -364,29 +360,6 @@ export function Friends() {
     try {
       if (!currentUser) return;
 
-      // Get users with mutual friends
-      const { data: mutualFriendsData } = await supabase.rpc('get_mutual_friends', {
-        user_uuid: currentUser.id,
-        limit_count: 10
-      });
-
-      if (mutualFriendsData && mutualFriendsData.length > 0) {
-        const suggestedList = mutualFriendsData.map(profile => ({
-          id: profile.id,
-          name: profile.name,
-          username: profile.username,
-          avatar: profile.avatar,
-          status: 'suggested' as const,
-          created_at: profile.created_at,
-          mutualFriends: profile.mutual_friends_count
-        }));
-        
-        setSuggested(suggestedList);
-        setLoading(false);
-        return;
-      }
-
-      // Fallback to regular suggestions if no mutual friends
       // Get users who are not already friends or have pending requests
       const { data: existingConnections } = await supabase
         .from('friends')
@@ -400,28 +373,73 @@ export function Friends() {
       });
       connectedUserIds.add(currentUser.id); // Exclude current user
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, name, username, avatar, created_at')
-        .not('id', 'in', `(${Array.from(connectedUserIds).join(',')})`)
-        .limit(10);
-
-      if (error) throw error;
-
-      const suggestedList = data?.map(profile => ({
-        id: profile.id,
-        name: profile.name,
-        username: profile.username,
-        avatar: profile.avatar,
-        status: 'suggested' as const,
-        created_at: profile.created_at
-      })) || [];
+      // Try to get users with mutual friends first
+      const { data: mutualFriendsData } = await supabase.rpc('get_mutual_friends', {
+        user_uuid: currentUser.id,
+        limit_count: 5
+      });
+      
+      let suggestedList: Friend[] = [];
+      
+      if (mutualFriendsData && mutualFriendsData.length > 0) {
+        suggestedList = mutualFriendsData.map(user => ({
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          avatar: user.avatar,
+          status: 'suggested' as const,
+          created_at: user.created_at,
+          mutualFriends: user.mutual_friends_count
+        }));
+      }
+      
+      // If we don't have enough suggestions with mutual friends, add some random users
+      if (suggestedList.length < 5) {
+        const excludeIds = [...connectedUserIds, ...suggestedList.map(u => u.id)];
+        const excludeIdsString = excludeIds.map(id => `'${id}'`).join(',');
+        
+        const { data: randomUsers } = await supabase
+          .from('profiles')
+          .select('id, name, username, avatar, created_at')
+          .not('id', 'in', `(${excludeIdsString})`)
+          .limit(5 - suggestedList.length);
+          
+        if (randomUsers) {
+          const randomSuggestions = randomUsers.map(user => ({
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            avatar: user.avatar,
+            status: 'suggested' as const,
+            created_at: user.created_at
+          }));
+          
+          suggestedList = [...suggestedList, ...randomSuggestions];
+        }
+      }
 
       setSuggested(suggestedList);
     } catch (error) {
       console.error('Error fetching suggested friends:', error);
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const fetchFriendTags = async () => {
+    try {
+      if (!currentUser) return;
+      
+      const { data, error } = await supabase
+        .from('friend_tags')
+        .select('id, name, color')
+        .eq('user_id', currentUser.id);
+        
+      if (error) throw error;
+      
+      setFriendTags(data || []);
+    } catch (error) {
+      console.error('Error fetching friend tags:', error);
     }
   };
 
@@ -439,7 +457,7 @@ export function Friends() {
         .select('id, name, username, avatar, created_at')
         .or(`name.ilike.%${query}%,username.ilike.%${query}%`)
         .neq('id', currentUser?.id)
-        .limit(20);
+        .limit(10);
 
       if (error) throw error;
 
@@ -461,18 +479,11 @@ export function Friends() {
             .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${user.id}),and(sender_id.eq.${user.id},receiver_id.eq.${currentUser.id})`)
             .eq('status', 'pending')
             .maybeSingle();
-            
-          // Get mutual friends count
-          const { data: mutualData } = await supabase.rpc('get_mutual_friends_count', {
-            user_uuid: currentUser.id,
-            friend_uuid: user.id
-          });
 
           return {
             ...user,
             isFriend: !!friendData,
-            isPending: !!pendingData,
-            mutualFriends: mutualData || 0
+            isPending: !!pendingData
           };
         })
       );
@@ -654,35 +665,51 @@ export function Friends() {
     }
   };
 
-  const handleRemoveFriend = async (friend: Friend) => {
+  const handleRemoveFriend = async () => {
+    if (!showRemoveDialog.friend?.friend_id) return;
+    
     try {
-      if (!friend.friend_id) return;
-      
-      setRemovingFriend(friend.id);
+      setRemovingFriend(showRemoveDialog.friend.id);
       
       const { error } = await supabase
         .from('friends')
         .delete()
-        .eq('id', friend.friend_id);
+        .eq('id', showRemoveDialog.friend.friend_id);
         
       if (error) throw error;
       
-      // Remove from favorites if exists
+      // Also remove from favorites if exists
+      if (showRemoveDialog.friend.isFavorite) {
+        await supabase
+          .from('favorite_friends')
+          .delete()
+          .eq('user_id', currentUser.id)
+          .eq('friend_id', showRemoveDialog.friend.id);
+      }
+      
+      // Remove any notes
       await supabase
-        .from('favorite_friends')
+        .from('friend_notes')
         .delete()
         .eq('user_id', currentUser.id)
-        .eq('friend_id', friend.id);
+        .eq('friend_id', showRemoveDialog.friend.id);
+        
+      // Remove any tag assignments
+      await supabase
+        .from('friend_tag_assignments')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('friend_id', showRemoveDialog.friend.id);
       
-      // Remove from friends list
-      setFriends(prev => prev.filter(f => f.id !== friend.id));
-      
-      setShowRemoveDialog({show: false, friend: null});
+      // Update friends list
+      setFriends(prev => prev.filter(friend => friend.id !== showRemoveDialog.friend?.id));
       
       toast({
         title: 'Friend removed',
-        description: `${friend.name} has been removed from your friends list`,
+        description: 'This user has been removed from your friends list',
       });
+      
+      setShowRemoveDialog({show: false, friend: null});
     } catch (error) {
       console.error('Error removing friend:', error);
       toast({
@@ -694,29 +721,25 @@ export function Friends() {
       setRemovingFriend(null);
     }
   };
-
-  const toggleFavoriteFriend = async (friendId: string, isFavorite: boolean) => {
+  
+  const toggleFavorite = async (friend: Friend) => {
     try {
-      if (isFavorite) {
+      if (friend.isFavorite) {
         // Remove from favorites
         await supabase
           .from('favorite_friends')
           .delete()
           .eq('user_id', currentUser.id)
-          .eq('friend_id', friendId);
+          .eq('friend_id', friend.id);
           
         // Update local state
-        setFriends(prev => 
-          prev.map(friend => 
-            friend.id === friendId 
-              ? { ...friend, favorite: false } 
-              : friend
-          )
-        );
+        setFriends(prev => prev.map(f => 
+          f.id === friend.id ? {...f, isFavorite: false} : f
+        ));
         
         toast({
           title: 'Removed from favorites',
-          description: 'Friend removed from favorites',
+          description: `${friend.name} has been removed from your favorites`,
         });
       } else {
         // Add to favorites
@@ -724,21 +747,17 @@ export function Friends() {
           .from('favorite_friends')
           .insert({
             user_id: currentUser.id,
-            friend_id: friendId
+            friend_id: friend.id
           });
           
         // Update local state
-        setFriends(prev => 
-          prev.map(friend => 
-            friend.id === friendId 
-              ? { ...friend, favorite: true } 
-              : friend
-          )
-        );
+        setFriends(prev => prev.map(f => 
+          f.id === friend.id ? {...f, isFavorite: true} : f
+        ));
         
         toast({
           title: 'Added to favorites',
-          description: 'Friend added to favorites',
+          description: `${friend.name} has been added to your favorites`,
         });
       }
     } catch (error) {
@@ -750,37 +769,181 @@ export function Friends() {
       });
     }
   };
-
-  const updateFriendTags = (friendId: string, tags: string[]) => {
-    setFriends(prev => 
-      prev.map(friend => 
-        friend.id === friendId 
-          ? { ...friend, tags } 
-          : friend
-      )
-    );
-    
-    toast({
-      title: 'Tags updated',
-      description: 'Friend tags have been updated',
-    });
+  
+  const toggleNotifications = async (friend: Friend) => {
+    try {
+      // In a real app, this would update a notifications setting in the database
+      // For now, we'll just update the local state
+      setFriends(prev => prev.map(f => 
+        f.id === friend.id ? {...f, notificationsEnabled: !f.notificationsEnabled} : f
+      ));
+      
+      toast({
+        title: friend.notificationsEnabled ? 'Notifications disabled' : 'Notifications enabled',
+        description: friend.notificationsEnabled 
+          ? `You won't receive notifications from ${friend.name}` 
+          : `You'll now receive notifications from ${friend.name}`,
+      });
+    } catch (error) {
+      console.error('Error toggling notifications:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to update notification settings',
+      });
+    }
   };
-
-  const updateFriendNote = (friendId: string, note: string) => {
-    setFriends(prev => 
-      prev.map(friend => 
-        friend.id === friendId 
-          ? { ...friend, notes: note } 
-          : friend
-      )
-    );
+  
+  const openNoteDialog = (friend: Friend) => {
+    setSelectedFriend(friend);
+    setNoteText(friend.note || '');
+    setShowNoteDialog(true);
+  };
+  
+  const saveNote = async () => {
+    if (!selectedFriend) return;
     
-    setShowNotesDialog({show: false, friend: null});
+    try {
+      // Check if note already exists
+      const { data } = await supabase
+        .from('friend_notes')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .eq('friend_id', selectedFriend.id)
+        .maybeSingle();
+        
+      if (data) {
+        // Update existing note
+        await supabase
+          .from('friend_notes')
+          .update({ 
+            note: noteText,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', data.id);
+      } else {
+        // Create new note
+        await supabase
+          .from('friend_notes')
+          .insert({
+            user_id: currentUser.id,
+            friend_id: selectedFriend.id,
+            note: noteText
+          });
+      }
+      
+      // Update local state
+      setFriends(prev => prev.map(f => 
+        f.id === selectedFriend.id ? {...f, note: noteText} : f
+      ));
+      
+      setShowNoteDialog(false);
+      
+      toast({
+        title: 'Note saved',
+        description: 'Your note has been saved successfully',
+      });
+    } catch (error) {
+      console.error('Error saving note:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to save note',
+      });
+    }
+  };
+  
+  const openTagsDialog = (friend: Friend) => {
+    setSelectedFriend(friend);
+    setSelectedTags(friend.tags || []);
+    setShowTagsDialog(true);
+  };
+  
+  const saveTags = async () => {
+    if (!selectedFriend) return;
     
-    toast({
-      title: 'Note saved',
-      description: 'Friend note has been saved',
-    });
+    try {
+      // First, remove all existing tag assignments
+      await supabase
+        .from('friend_tag_assignments')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('friend_id', selectedFriend.id);
+        
+      // Then add new tag assignments
+      if (selectedTags.length > 0) {
+        // Get tag IDs
+        const { data: tagData } = await supabase
+          .from('friend_tags')
+          .select('id, name')
+          .eq('user_id', currentUser.id)
+          .in('name', selectedTags);
+          
+        if (tagData && tagData.length > 0) {
+          const tagAssignments = tagData.map(tag => ({
+            user_id: currentUser.id,
+            friend_id: selectedFriend.id,
+            tag_id: tag.id
+          }));
+          
+          await supabase
+            .from('friend_tag_assignments')
+            .insert(tagAssignments);
+        }
+      }
+      
+      // Update local state
+      setFriends(prev => prev.map(f => 
+        f.id === selectedFriend.id ? {...f, tags: selectedTags} : f
+      ));
+      
+      setShowTagsDialog(false);
+      
+      toast({
+        title: 'Tags updated',
+        description: 'Friend tags have been updated successfully',
+      });
+    } catch (error) {
+      console.error('Error saving tags:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to update tags',
+      });
+    }
+  };
+  
+  const createNewTag = async (name: string, color: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('friend_tags')
+        .insert({
+          user_id: currentUser.id,
+          name,
+          color
+        })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      setFriendTags(prev => [...prev, data]);
+      
+      toast({
+        title: 'Tag created',
+        description: 'New tag has been created successfully',
+      });
+      
+      return data;
+    } catch (error) {
+      console.error('Error creating tag:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to create tag',
+      });
+      return null;
+    }
   };
 
   const openChat = (userId: string) => {
@@ -788,34 +951,33 @@ export function Friends() {
   };
 
   const filterUsers = (users: Friend[]) => {
-    if (!searchQuery.trim() && !filterFavorites && filterTags.length === 0) {
-      return users;
+    if (!searchQuery.trim()) {
+      // Apply filter options
+      let filteredUsers = [...users];
+      
+      if (filterOptions.favorites) {
+        filteredUsers = filteredUsers.filter(user => user.isFavorite);
+      }
+      
+      if (filterOptions.online) {
+        filteredUsers = filteredUsers.filter(user => user.isOnline);
+      }
+      
+      if (filterOptions.tags.length > 0) {
+        filteredUsers = filteredUsers.filter(user => {
+          if (!user.tags || user.tags.length === 0) return false;
+          return filterOptions.tags.some(tag => user.tags?.includes(tag));
+        });
+      }
+      
+      return filteredUsers;
     }
     
-    let filtered = users;
-    
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(user => 
-        user.name.toLowerCase().includes(query) ||
-        user.username.toLowerCase().includes(query)
-      );
-    }
-    
-    // Apply favorites filter
-    if (filterFavorites) {
-      filtered = filtered.filter(user => user.favorite);
-    }
-    
-    // Apply tags filter
-    if (filterTags.length > 0) {
-      filtered = filtered.filter(user => 
-        user.tags && filterTags.some(tag => user.tags?.includes(tag))
-      );
-    }
-    
-    return filtered;
+    const query = searchQuery.toLowerCase();
+    return users.filter(user => 
+      user.name.toLowerCase().includes(query) ||
+      user.username.toLowerCase().includes(query)
+    );
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -830,98 +992,45 @@ export function Friends() {
     }
   };
   
-  const sortFriends = (friendsList: Friend[]) => {
-    let sorted = [...friendsList];
-    
+  const sortFriends = (friendsList: Friend[], sortBy: 'name' | 'recent' | 'activity') => {
     switch (sortBy) {
       case 'name':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      case 'date':
-        sorted.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-        break;
+        return [...friendsList].sort((a, b) => a.name.localeCompare(b.name));
+      case 'recent':
+        return [...friendsList].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       case 'activity':
-        sorted.sort((a, b) => {
-          const dateA = a.last_interaction ? new Date(a.last_interaction).getTime() : new Date(a.created_at).getTime();
-          const dateB = b.last_interaction ? new Date(b.last_interaction).getTime() : new Date(b.created_at).getTime();
-          return dateB - dateA; // Most recent first
+        // Sort by online status first, then by last active time
+        return [...friendsList].sort((a, b) => {
+          if (a.isOnline && !b.isOnline) return -1;
+          if (!a.isOnline && b.isOnline) return 1;
+          return 0;
         });
-        break;
+      default:
+        return friendsList;
     }
-    
-    // Apply sort order
-    if (sortOrder === 'asc' && sortBy !== 'activity') {
-      return sorted;
-    } else if (sortOrder === 'desc' && sortBy !== 'activity') {
-      return sorted.reverse();
-    }
-    
-    return sorted;
   };
   
-  const refreshData = async () => {
-    setRefreshing(true);
-    await Promise.all([
-      fetchFriends(),
-      fetchFriendRequests(),
-      fetchSuggestedFriends()
-    ]);
-    setRefreshing(false);
-    
-    toast({
-      title: 'Refreshed',
-      description: 'Friend data has been refreshed',
+  const toggleFilter = (filter: 'favorites' | 'online') => {
+    setFilterOptions(prev => ({
+      ...prev,
+      [filter]: !prev[filter]
+    }));
+  };
+  
+  const toggleTagFilter = (tag: string) => {
+    setFilterOptions(prev => {
+      if (prev.tags.includes(tag)) {
+        return {
+          ...prev,
+          tags: prev.tags.filter(t => t !== tag)
+        };
+      } else {
+        return {
+          ...prev,
+          tags: [...prev.tags, tag]
+        };
+      }
     });
-  };
-  
-  const handleUserClick = (user: any) => {
-    setSelectedUser(user);
-    setShowUserDialog(true);
-  };
-  
-  const handleTagsClick = () => {
-    setShowTagsDialog(true);
-  };
-  
-  const handleNotesClick = (friend: Friend) => {
-    setFriendNote(friend.notes || '');
-    setShowNotesDialog({show: true, friend});
-  };
-  
-  const toggleTagFilter = (tagId: string) => {
-    setFilterTags(prev => 
-      prev.includes(tagId)
-        ? prev.filter(id => id !== tagId)
-        : [...prev, tagId]
-    );
-  };
-  
-  const getTagName = (tagId: string) => {
-    const tag = friendTags.find(t => t.id === tagId);
-    return tag ? tag.name : '';
-  };
-  
-  const getTagColor = (tagId: string) => {
-    const tag = friendTags.find(t => t.id === tagId);
-    return tag ? tag.color : '#888888';
-  };
-  
-  const getOnlineStatusColor = (status?: 'online' | 'offline' | 'away' | 'busy') => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'away': return 'bg-yellow-500';
-      case 'busy': return 'bg-red-500';
-      default: return 'bg-gray-400';
-    }
-  };
-  
-  const getOnlineStatusText = (status?: 'online' | 'offline' | 'away' | 'busy', lastSeen?: string) => {
-    switch (status) {
-      case 'online': return 'Online';
-      case 'away': return 'Away';
-      case 'busy': return 'Busy';
-      default: return lastSeen ? `Last seen ${formatDistanceToNow(new Date(lastSeen), { addSuffix: true })}` : 'Offline';
-    }
   };
 
   const UserCard = ({ user, type }: { user: Friend; type: 'friend' | 'request' | 'suggested' }) => (
@@ -929,10 +1038,7 @@ export function Friends() {
       <CardContent className="p-3">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <Avatar 
-              className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'} cursor-pointer`}
-              onClick={() => handleUserClick(user)}
-            >
+            <Avatar className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'}`}>
               {user.avatar ? (
                 <AvatarImage src={user.avatar} alt={user.name} />
               ) : (
@@ -942,57 +1048,59 @@ export function Friends() {
               )}
             </Avatar>
             {type === 'friend' && (
-              <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full ${getOnlineStatusColor(user.online_status)} border border-white`}></div>
+              <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${user.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}>
+                {user.isOnline && <div className="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-75"></div>}
+              </div>
+            )}
+            {user.isFavorite && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center border border-white">
+                <Star className="h-2 w-2 text-white" />
+              </div>
             )}
           </div>
           
-          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleUserClick(user)}>
-            <div className="flex items-center gap-2">
-              <h3 className="font-pixelated text-sm font-medium truncate">{user.name}</h3>
-              {type === 'friend' && user.favorite && (
-                <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-              )}
-            </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-pixelated text-sm font-medium truncate">{user.name}</h3>
             <p className="font-pixelated text-xs text-muted-foreground truncate">@{user.username}</p>
-            <div className="flex flex-wrap items-center gap-1 mt-1">
+            <div className="flex items-center gap-1 mt-1">
               {type === 'friend' && (
-                <>
-                  <span className={`inline-flex items-center h-4 px-1 rounded-full text-[8px] font-pixelated ${getOnlineStatusColor(user.online_status)} bg-opacity-20 text-foreground`}>
-                    {getOnlineStatusText(user.online_status, user.last_seen)}
-                  </span>
-                  
-                  {user.tags && user.tags.length > 0 && user.tags.map(tagId => (
-                    <span 
-                      key={tagId}
-                      className="inline-flex items-center h-4 px-1 rounded-full text-[8px] font-pixelated"
-                      style={{ backgroundColor: `${getTagColor(tagId)}20`, color: getTagColor(tagId) }}
-                    >
-                      {getTagName(tagId)}
-                    </span>
-                  ))}
-                </>
+                <p className="font-pixelated text-xs text-muted-foreground">
+                  {user.isOnline ? 'Online' : `Last seen ${user.lastActive}`}
+                </p>
               )}
-              
-              {type === 'friend' ? (
-                user.last_interaction ? (
-                  <span className="text-[8px] text-muted-foreground font-pixelated">
-                    • {formatDistanceToNow(new Date(user.last_interaction), { addSuffix: true })}
-                  </span>
-                ) : null
-              ) : type === 'request' ? (
-                <span className="text-[8px] text-muted-foreground font-pixelated">
-                  • Requested {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
-                </span>
-              ) : (
-                <>
-                  {user.mutualFriends && user.mutualFriends > 0 && (
-                    <span className="text-[8px] text-social-blue font-pixelated">
-                      • {user.mutualFriends} mutual friend{user.mutualFriends !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </>
+              {type === 'request' && (
+                <p className="font-pixelated text-xs text-muted-foreground">
+                  Requested {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+                </p>
+              )}
+              {type === 'suggested' && user.mutualFriends && (
+                <Badge variant="outline" className="h-4 px-1 text-[8px] font-pixelated">
+                  {user.mutualFriends} mutual
+                </Badge>
               )}
             </div>
+            {user.tags && user.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {user.tags.slice(0, 2).map((tag, index) => {
+                  const tagObj = friendTags.find(t => t.name === tag);
+                  return (
+                    <Badge 
+                      key={index} 
+                      variant="outline" 
+                      className="h-4 px-1 text-[8px] font-pixelated"
+                      style={{ borderColor: tagObj?.color, color: tagObj?.color }}
+                    >
+                      {tag}
+                    </Badge>
+                  );
+                })}
+                {user.tags.length > 2 && (
+                  <Badge variant="outline" className="h-4 px-1 text-[8px] font-pixelated">
+                    +{user.tags.length - 2}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">
@@ -1011,89 +1119,57 @@ export function Friends() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="font-pixelated text-xs h-6 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50"
+                      className="font-pixelated text-xs h-6"
                     >
-                      <MoreHorizontal className="h-3 w-3 mr-1" />
+                      <Settings className="h-3 w-3 mr-1" />
                       Manage
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuContent align="end">
                     <DropdownMenuItem 
-                      onClick={() => toggleFavoriteFriend(user.id, !!user.favorite)}
+                      onClick={() => toggleFavorite(user)}
                       className="font-pixelated text-xs cursor-pointer"
                     >
-                      {user.favorite ? (
+                      <Star className={`h-3 w-3 mr-2 ${user.isFavorite ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+                      {user.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => openTagsDialog(user)}
+                      className="font-pixelated text-xs cursor-pointer"
+                    >
+                      <Tag className="h-3 w-3 mr-2" />
+                      Manage Tags
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => openNoteDialog(user)}
+                      className="font-pixelated text-xs cursor-pointer"
+                    >
+                      <Pencil className="h-3 w-3 mr-2" />
+                      {user.note ? 'Edit Note' : 'Add Note'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => toggleNotifications(user)}
+                      className="font-pixelated text-xs cursor-pointer"
+                    >
+                      {user.notificationsEnabled ? (
                         <>
-                          <Star className="h-3 w-3 mr-2 text-yellow-500 fill-yellow-500" />
-                          Remove from favorites
+                          <BellOff className="h-3 w-3 mr-2" />
+                          Mute Notifications
                         </>
                       ) : (
                         <>
-                          <Star className="h-3 w-3 mr-2" />
-                          Add to favorites
+                          <Bell className="h-3 w-3 mr-2" />
+                          Enable Notifications
                         </>
                       )}
                     </DropdownMenuItem>
-                    
                     <DropdownMenuSeparator />
-                    
-                    <DropdownMenuItem 
-                      onClick={() => handleNotesClick(user)}
-                      className="font-pixelated text-xs cursor-pointer"
-                    >
-                      <Bookmark className="h-3 w-3 mr-2" />
-                      {user.notes ? 'Edit note' : 'Add note'}
-                    </DropdownMenuItem>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <div className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-pixelated">
-                          <Tag className="h-3 w-3 mr-2" />
-                          Manage tags
-                        </div>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-48">
-                        <DropdownMenuLabel className="font-pixelated text-xs">Assign Tags</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        {friendTags.map(tag => (
-                          <DropdownMenuCheckboxItem
-                            key={tag.id}
-                            checked={user.tags?.includes(tag.id)}
-                            onCheckedChange={(checked) => {
-                              const newTags = user.tags ? [...user.tags] : [];
-                              if (checked) {
-                                if (!newTags.includes(tag.id)) newTags.push(tag.id);
-                              } else {
-                                const index = newTags.indexOf(tag.id);
-                                if (index !== -1) newTags.splice(index, 1);
-                              }
-                              updateFriendTags(user.id, newTags);
-                            }}
-                            className="font-pixelated text-xs cursor-pointer"
-                          >
-                            <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: tag.color }}></span>
-                            {tag.name}
-                          </DropdownMenuCheckboxItem>
-                        ))}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={handleTagsClick}
-                          className="font-pixelated text-xs cursor-pointer"
-                        >
-                          <Settings className="h-3 w-3 mr-2" />
-                          Manage all tags
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    
-                    <DropdownMenuSeparator />
-                    
                     <DropdownMenuItem 
                       onClick={() => setShowRemoveDialog({show: true, friend: user})}
                       className="font-pixelated text-xs text-destructive cursor-pointer"
                     >
                       <UserMinus className="h-3 w-3 mr-2" />
-                      Remove friend
+                      Remove Friend
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1136,18 +1212,20 @@ export function Friends() {
             )}
           </div>
         </div>
+        {user.note && (
+          <div className="mt-2 p-2 bg-muted/30 rounded-md">
+            <p className="font-pixelated text-xs text-muted-foreground">{user.note}</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
-
-  const UserGridCard = ({ user }: { user: Friend }) => (
+  
+  const UserCardGrid = ({ user, type }: { user: Friend; type: 'friend' | 'request' | 'suggested' }) => (
     <Card className={`hover:shadow-md transition-all duration-200 hover-scale ${isCrimson ? 'border-red-100' : ''}`}>
       <CardContent className="p-3 flex flex-col items-center text-center">
         <div className="relative mb-2">
-          <Avatar 
-            className={`w-16 h-16 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'} cursor-pointer`}
-            onClick={() => handleUserClick(user)}
-          >
+          <Avatar className={`w-16 h-16 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'}`}>
             {user.avatar ? (
               <AvatarImage src={user.avatar} alt={user.name} />
             ) : (
@@ -1156,10 +1234,14 @@ export function Friends() {
               </AvatarFallback>
             )}
           </Avatar>
-          <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${getOnlineStatusColor(user.online_status)} border border-white`}></div>
-          {user.favorite && (
-            <div className="absolute -top-1 -right-1">
-              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+          {type === 'friend' && (
+            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border border-white ${user.isOnline ? 'bg-green-500' : 'bg-gray-400'}`}>
+              {user.isOnline && <div className="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-75"></div>}
+            </div>
+          )}
+          {user.isFavorite && (
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center border border-white">
+              <Star className="h-2 w-2 text-white" />
             </div>
           )}
         </div>
@@ -1167,109 +1249,153 @@ export function Friends() {
         <h3 className="font-pixelated text-sm font-medium truncate w-full">{user.name}</h3>
         <p className="font-pixelated text-xs text-muted-foreground truncate w-full">@{user.username}</p>
         
-        <div className="flex flex-wrap justify-center gap-1 mt-2 mb-3">
-          {user.tags && user.tags.length > 0 && user.tags.map(tagId => (
-            <span 
-              key={tagId}
-              className="inline-flex items-center h-4 px-1 rounded-full text-[8px] font-pixelated"
-              style={{ backgroundColor: `${getTagColor(tagId)}20`, color: getTagColor(tagId) }}
-            >
-              {getTagName(tagId)}
-            </span>
-          ))}
+        <div className="flex items-center justify-center gap-1 mt-1">
+          {type === 'friend' && (
+            <p className="font-pixelated text-xs text-muted-foreground">
+              {user.isOnline ? 'Online' : `Last seen ${user.lastActive}`}
+            </p>
+          )}
+          {type === 'request' && (
+            <p className="font-pixelated text-xs text-muted-foreground">
+              Requested {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+            </p>
+          )}
+          {type === 'suggested' && user.mutualFriends && (
+            <Badge variant="outline" className="h-4 px-1 text-[8px] font-pixelated">
+              {user.mutualFriends} mutual
+            </Badge>
+          )}
         </div>
         
-        <div className="flex gap-1 mt-auto">
-          <Button
-            onClick={() => openChat(user.id)}
-            size="sm"
-            className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs h-6 flex-1`}
-          >
-            <MessageCircle className="h-3 w-3 mr-1" />
-            Chat
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+        {user.tags && user.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 justify-center mt-1">
+            {user.tags.slice(0, 2).map((tag, index) => {
+              const tagObj = friendTags.find(t => t.name === tag);
+              return (
+                <Badge 
+                  key={index} 
+                  variant="outline" 
+                  className="h-4 px-1 text-[8px] font-pixelated"
+                  style={{ borderColor: tagObj?.color, color: tagObj?.color }}
+                >
+                  {tag}
+                </Badge>
+              );
+            })}
+            {user.tags.length > 2 && (
+              <Badge variant="outline" className="h-4 px-1 text-[8px] font-pixelated">
+                +{user.tags.length - 2}
+              </Badge>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-1 mt-3">
+          {type === 'friend' && (
+            <>
               <Button
+                onClick={() => openChat(user.id)}
                 size="sm"
-                variant="outline"
-                className="font-pixelated text-xs h-6 border-muted-foreground/30 text-muted-foreground hover:bg-muted/50"
+                className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs h-6`}
               >
-                <MoreHorizontal className="h-3 w-3" />
+                <MessageCircle className="h-3 w-3 mr-1" />
+                Chat
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem 
-                onClick={() => toggleFavoriteFriend(user.id, !!user.favorite)}
-                className="font-pixelated text-xs cursor-pointer"
-              >
-                {user.favorite ? (
-                  <>
-                    <Star className="h-3 w-3 mr-2 text-yellow-500 fill-yellow-500" />
-                    Remove from favorites
-                  </>
-                ) : (
-                  <>
-                    <Star className="h-3 w-3 mr-2" />
-                    Add to favorites
-                  </>
-                )}
-              </DropdownMenuItem>
-              
-              <DropdownMenuSeparator />
-              
-              <DropdownMenuItem 
-                onClick={() => handleNotesClick(user)}
-                className="font-pixelated text-xs cursor-pointer"
-              >
-                <Bookmark className="h-3 w-3 mr-2" />
-                {user.notes ? 'Edit note' : 'Add note'}
-              </DropdownMenuItem>
-              
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <div className="relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 font-pixelated">
-                    <Tag className="h-3 w-3 mr-2" />
-                    Manage tags
-                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="font-pixelated text-xs h-6"
+                  >
+                    <Settings className="h-3 w-3" />
+                  </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-48">
-                  <DropdownMenuLabel className="font-pixelated text-xs">Assign Tags</DropdownMenuLabel>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem 
+                    onClick={() => toggleFavorite(user)}
+                    className="font-pixelated text-xs cursor-pointer"
+                  >
+                    <Star className={`h-3 w-3 mr-2 ${user.isFavorite ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+                    {user.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => openTagsDialog(user)}
+                    className="font-pixelated text-xs cursor-pointer"
+                  >
+                    <Tag className="h-3 w-3 mr-2" />
+                    Manage Tags
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => openNoteDialog(user)}
+                    className="font-pixelated text-xs cursor-pointer"
+                  >
+                    <Pencil className="h-3 w-3 mr-2" />
+                    {user.note ? 'Edit Note' : 'Add Note'}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => toggleNotifications(user)}
+                    className="font-pixelated text-xs cursor-pointer"
+                  >
+                    {user.notificationsEnabled ? (
+                      <>
+                        <BellOff className="h-3 w-3 mr-2" />
+                        Mute Notifications
+                      </>
+                    ) : (
+                      <>
+                        <Bell className="h-3 w-3 mr-2" />
+                        Enable Notifications
+                      </>
+                    )}
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  {friendTags.map(tag => (
-                    <DropdownMenuCheckboxItem
-                      key={tag.id}
-                      checked={user.tags?.includes(tag.id)}
-                      onCheckedChange={(checked) => {
-                        const newTags = user.tags ? [...user.tags] : [];
-                        if (checked) {
-                          if (!newTags.includes(tag.id)) newTags.push(tag.id);
-                        } else {
-                          const index = newTags.indexOf(tag.id);
-                          if (index !== -1) newTags.splice(index, 1);
-                        }
-                        updateFriendTags(user.id, newTags);
-                      }}
-                      className="font-pixelated text-xs cursor-pointer"
-                    >
-                      <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: tag.color }}></span>
-                      {tag.name}
-                    </DropdownMenuCheckboxItem>
-                  ))}
+                  <DropdownMenuItem 
+                    onClick={() => setShowRemoveDialog({show: true, friend: user})}
+                    className="font-pixelated text-xs text-destructive cursor-pointer"
+                  >
+                    <UserMinus className="h-3 w-3 mr-2" />
+                    Remove Friend
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              
-              <DropdownMenuSeparator />
-              
-              <DropdownMenuItem 
-                onClick={() => setShowRemoveDialog({show: true, friend: user})}
-                className="font-pixelated text-xs text-destructive cursor-pointer"
+            </>
+          )}
+          
+          {type === 'request' && (
+            <>
+              <Button
+                onClick={() => acceptFriendRequest(user)}
+                size="sm"
+                disabled={processingRequest === user.id}
+                className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs h-6`}
               >
-                <UserMinus className="h-3 w-3 mr-2" />
-                Remove friend
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <UserCheck className="h-3 w-3 mr-1" />
+                {processingRequest === user.id ? 'Processing...' : 'Accept'}
+              </Button>
+              <Button
+                onClick={() => rejectFriendRequest(user)}
+                size="sm"
+                variant="destructive"
+                disabled={processingRequest === user.id}
+                className="font-pixelated text-xs h-6"
+              >
+                <X className="h-3 w-3 mr-1" />
+                {processingRequest === user.id ? 'Processing...' : 'Reject'}
+              </Button>
+            </>
+          )}
+          
+          {type === 'suggested' && (
+            <Button
+              onClick={() => sendFriendRequest(user.id)}
+              size="sm"
+              className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-blue hover:bg-social-blue/90'} text-white font-pixelated text-xs h-6`}
+            >
+              <UserPlus className="h-3 w-3 mr-1" />
+              Add Friend
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -1279,10 +1405,7 @@ export function Friends() {
     <Card className={`hover:shadow-md transition-all duration-200 hover-scale ${isCrimson ? 'border-red-100' : ''}`}>
       <CardContent className="p-3">
         <div className="flex items-center gap-3">
-          <Avatar 
-            className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'} cursor-pointer`}
-            onClick={() => handleUserClick(user)}
-          >
+          <Avatar className={`w-12 h-12 border-2 ${isCrimson ? 'border-red-200' : 'border-social-green'}`}>
             {user.avatar ? (
               <AvatarImage src={user.avatar} alt={user.name} />
             ) : (
@@ -1292,19 +1415,12 @@ export function Friends() {
             )}
           </Avatar>
           
-          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleUserClick(user)}>
+          <div className="flex-1 min-w-0">
             <h3 className="font-pixelated text-sm font-medium truncate">{user.name}</h3>
             <p className="font-pixelated text-xs text-muted-foreground truncate">@{user.username}</p>
-            <div className="flex items-center">
-              <p className="font-pixelated text-xs text-muted-foreground">
-                Joined {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
-              </p>
-              {user.mutualFriends && user.mutualFriends > 0 && (
-                <div className="flex items-center ml-2">
-                  <span className="text-xs text-social-blue font-pixelated">• {user.mutualFriends} mutual</span>
-                </div>
-              )}
-            </div>
+            <p className="font-pixelated text-xs text-muted-foreground">
+              Joined {formatDistanceToNow(new Date(user.created_at), { addSuffix: true })}
+            </p>
           </div>
 
           <div className="flex flex-col gap-1">
@@ -1397,26 +1513,10 @@ export function Friends() {
                 'Friends'
               )}
             </h1>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => setShowInfoDialog(true)}
-                  >
-                    <Info className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-pixelated text-xs">About Friends</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
           </div>
           
           <div className="flex items-center gap-2">
+            {/* View Mode Toggle */}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -1424,107 +1524,12 @@ export function Friends() {
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={refreshData}
-                    disabled={refreshing}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-pixelated text-xs">Refresh</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            
-            <div className="relative max-w-sm">
-              {isCrimson ? (
-                <CrimsonSearchInput
-                  placeholder="Search by name or username..."
-                  value={searchQuery}
-                  onChange={handleSearch}
-                  className="font-pixelated text-xs h-8"
-                />
-              ) : (
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search by name or username..."
-                    value={searchQuery}
-                    onChange={handleSearch}
-                    className="font-pixelated text-xs h-8 pl-8"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Filter and Sort Controls */}
-        <div className="flex items-center justify-between p-2 bg-muted/30">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`h-7 px-2 font-pixelated text-xs ${filterFavorites ? 'bg-yellow-100 text-yellow-700' : ''}`}
-              onClick={() => setFilterFavorites(!filterFavorites)}
-            >
-              <Star className={`h-3 w-3 mr-1 ${filterFavorites ? 'fill-yellow-500 text-yellow-500' : ''}`} />
-              {filterFavorites ? 'All Friends' : 'Favorites'}
-            </Button>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`h-7 px-2 font-pixelated text-xs ${filterTags.length > 0 ? 'bg-blue-100 text-blue-700' : ''}`}
-                >
-                  <Tag className={`h-3 w-3 mr-1 ${filterTags.length > 0 ? 'text-blue-500' : ''}`} />
-                  {filterTags.length > 0 ? `${filterTags.length} Tag${filterTags.length !== 1 ? 's' : ''}` : 'Tags'}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuLabel className="font-pixelated text-xs">Filter by Tags</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {friendTags.map(tag => (
-                  <DropdownMenuCheckboxItem
-                    key={tag.id}
-                    checked={filterTags.includes(tag.id)}
-                    onCheckedChange={() => toggleTagFilter(tag.id)}
-                    className="font-pixelated text-xs cursor-pointer"
-                  >
-                    <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: tag.color }}></span>
-                    {tag.name}
-                  </DropdownMenuCheckboxItem>
-                ))}
-                {filterTags.length > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={() => setFilterTags([])}
-                      className="font-pixelated text-xs cursor-pointer"
-                    >
-                      <X className="h-3 w-3 mr-2" />
-                      Clear all filters
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 font-pixelated text-xs"
                     onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
                   >
                     {viewMode === 'list' ? (
-                      <LayoutGrid className="h-3 w-3" />
+                      <LayoutGrid className="h-4 w-4" />
                     ) : (
-                      <List className="h-3 w-3" />
+                      <List className="h-4 w-4" />
                     )}
                   </Button>
                 </TooltipTrigger>
@@ -1535,62 +1540,190 @@ export function Friends() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          </div>
-          
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground font-pixelated">Sort:</span>
+            
+            {/* Sort Options */}
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 px-2 font-pixelated text-xs">
-                  {sortBy === 'name' ? 'Name' : sortBy === 'date' ? 'Date Added' : 'Recent Activity'}
-                  {sortOrder === 'asc' ? (
-                    <SortAsc className="h-3 w-3 ml-1" />
-                  ) : (
-                    <SortDesc className="h-3 w-3 ml-1" />
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuRadioGroup value={sortBy} onValueChange={(value) => setSortBy(value as any)}>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                      >
+                        {sortOption === 'name' ? (
+                          <SortAsc className="h-4 w-4" />
+                        ) : (
+                          <SortDesc className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-pixelated text-xs">Sort Options</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel className="font-pixelated text-xs">Sort By</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={sortOption} onValueChange={(value) => setSortOption(value as any)}>
                   <DropdownMenuRadioItem value="name" className="font-pixelated text-xs cursor-pointer">
+                    <SortAsc className="h-3 w-3 mr-2" />
                     Name
                   </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="date" className="font-pixelated text-xs cursor-pointer">
-                    Date Added
+                  <DropdownMenuRadioItem value="recent" className="font-pixelated text-xs cursor-pointer">
+                    <Clock className="h-3 w-3 mr-2" />
+                    Recently Added
                   </DropdownMenuRadioItem>
                   <DropdownMenuRadioItem value="activity" className="font-pixelated text-xs cursor-pointer">
-                    Recent Activity
+                    <Users className="h-3 w-3 mr-2" />
+                    Online Status
                   </DropdownMenuRadioItem>
                 </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
+            {/* Filter Options */}
+            <DropdownMenu>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className={`h-8 w-8 ${
+                          (filterOptions.favorites || filterOptions.online || filterOptions.tags.length > 0) 
+                            ? 'bg-muted border-primary' 
+                            : ''
+                        }`}
+                      >
+                        <Filter className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-pixelated text-xs">Filter Options</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel className="font-pixelated text-xs">Filter Friends</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem 
-                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  onClick={() => toggleFilter('favorites')}
                   className="font-pixelated text-xs cursor-pointer"
                 >
-                  {sortOrder === 'asc' ? (
-                    <>
-                      <SortAsc className="h-3 w-3 mr-2" />
-                      Ascending
-                    </>
-                  ) : (
-                    <>
-                      <SortDesc className="h-3 w-3 mr-2" />
-                      Descending
-                    </>
-                  )}
+                  <div className="flex items-center w-full">
+                    <Star className={`h-3 w-3 mr-2 ${filterOptions.favorites ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+                    <span>Favorites Only</span>
+                    {filterOptions.favorites && (
+                      <Badge variant="outline" className="ml-auto h-4 px-1 text-[8px]">
+                        On
+                      </Badge>
+                    )}
+                  </div>
                 </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => toggleFilter('online')}
+                  className="font-pixelated text-xs cursor-pointer"
+                >
+                  <div className="flex items-center w-full">
+                    <div className="h-3 w-3 mr-2 rounded-full bg-green-500 flex-shrink-0"></div>
+                    <span>Online Only</span>
+                    {filterOptions.online && (
+                      <Badge variant="outline" className="ml-auto h-4 px-1 text-[8px]">
+                        On
+                      </Badge>
+                    )}
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="font-pixelated text-xs">Filter by Tags</DropdownMenuLabel>
+                {friendTags.length > 0 ? (
+                  friendTags.map(tag => (
+                    <DropdownMenuItem 
+                      key={tag.id}
+                      onClick={() => toggleTagFilter(tag.name)}
+                      className="font-pixelated text-xs cursor-pointer"
+                    >
+                      <div className="flex items-center w-full">
+                        <div 
+                          className="h-3 w-3 mr-2 rounded-full flex-shrink-0" 
+                          style={{ backgroundColor: tag.color }}
+                        ></div>
+                        <span>{tag.name}</span>
+                        {filterOptions.tags.includes(tag.name) && (
+                          <Badge variant="outline" className="ml-auto h-4 px-1 text-[8px]">
+                            On
+                          </Badge>
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+                  ))
+                ) : (
+                  <div className="px-2 py-1 text-xs text-muted-foreground">
+                    No tags created yet
+                  </div>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => setShowTagDialog(true)}
+                  className="font-pixelated text-xs cursor-pointer"
+                >
+                  <Plus className="h-3 w-3 mr-2" />
+                  Create New Tag
+                </DropdownMenuItem>
+                {(filterOptions.favorites || filterOptions.online || filterOptions.tags.length > 0) && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={() => setFilterOptions({ favorites: false, online: false, tags: [] })}
+                      className="font-pixelated text-xs cursor-pointer"
+                    >
+                      <X className="h-3 w-3 mr-2" />
+                      Clear All Filters
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
+        
+        {/* Search Bar */}
+        <div className="p-3 bg-background sticky top-[57px] z-10 backdrop-blur-sm border-b">
+          <div className="relative max-w-sm mx-auto">
+            {isCrimson ? (
+              <CrimsonSearchInput
+                placeholder="Search by name or username..."
+                value={searchQuery}
+                onChange={handleSearch}
+                className="font-pixelated text-xs h-8"
+              />
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or username..."
+                  value={searchQuery}
+                  onChange={handleSearch}
+                  className="font-pixelated text-xs h-8 pl-8"
+                />
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-[calc(100vh-160px)]">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-[calc(100vh-120px)]">
           <TabsList className={`grid w-full grid-cols-4 mx-3 mt-3 ${isCrimson ? 'bg-red-50' : ''}`}>
             <TabsTrigger value="friends" className="font-pixelated text-xs relative">
               Friends
               {friends.length > 0 && (
-                <Badge variant="secondary" className={`ml-2 h-4 w-4 p-0 text-xs ${isCrimson ? 'bg-red-100 text-red-700' : ''}`}>
+                <Badge variant="secondary" className={`ml-2 h-4 w-auto px-1 text-xs ${isCrimson ? 'bg-red-100 text-red-700' : ''}`}>
                   {friends.length}
                 </Badge>
               )}
@@ -1598,7 +1731,7 @@ export function Friends() {
             <TabsTrigger value="requests" className="font-pixelated text-xs relative">
               Requests
               {requests.length > 0 && (
-                <Badge variant="destructive" className={`ml-2 h-4 w-4 p-0 text-xs animate-pulse ${isCrimson ? 'bg-red-600' : ''}`}>
+                <Badge variant="destructive" className={`ml-2 h-4 w-auto px-1 text-xs animate-pulse ${isCrimson ? 'bg-red-600' : ''}`}>
                   {requests.length}
                 </Badge>
               )}
@@ -1606,7 +1739,7 @@ export function Friends() {
             <TabsTrigger value="suggested" className="font-pixelated text-xs relative">
               Suggested
               {suggested.length > 0 && (
-                <Badge variant="outline" className="ml-2 h-4 w-4 p-0 text-xs">
+                <Badge variant="outline" className="ml-2 h-4 w-auto px-1 text-xs">
                   {suggested.length}
                 </Badge>
               )}
@@ -1614,7 +1747,7 @@ export function Friends() {
             <TabsTrigger value="search" className="font-pixelated text-xs relative">
               Search
               {searchResults.length > 0 && (
-                <Badge variant="outline" className={`ml-2 h-4 w-4 p-0 text-xs ${isCrimson ? 'border-red-200 bg-red-50' : ''}`}>
+                <Badge variant="outline" className={`ml-2 h-4 w-auto px-1 text-xs ${isCrimson ? 'border-red-200 bg-red-50' : ''}`}>
                   {searchResults.length}
                 </Badge>
               )}
@@ -1623,48 +1756,42 @@ export function Friends() {
 
           <TabsContent value="friends" className="h-[calc(100%-60px)] mt-3">
             <ScrollArea className="h-full px-3 scroll-container">
-              {filterUsers(sortFriends(friends)).length > 0 ? (
-                viewMode === 'list' ? (
-                  <div className="space-y-3 pb-3">
-                    {filterUsers(sortFriends(friends)).map((friend) => (
+              {filterUsers(friends).length > 0 ? (
+                <div className={`${viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 gap-3' : 'space-y-3'} pb-3`}>
+                  {filterUsers(friends).map((friend) => (
+                    viewMode === 'grid' ? (
+                      <UserCardGrid key={friend.id} user={friend} type="friend" />
+                    ) : (
                       <UserCard key={friend.id} user={friend} type="friend" />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3">
-                    {filterUsers(sortFriends(friends)).map((friend) => (
-                      <UserGridCard key={friend.id} user={friend} />
-                    ))}
-                  </div>
-                )
+                    )
+                  ))}
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
                   <Users className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
                   <h2 className="font-pixelated text-sm font-medium mb-2">
-                    {searchQuery ? 'No friends found' : filterFavorites ? 'No favorite friends yet' : filterTags.length > 0 ? 'No friends with selected tags' : 'No friends yet'}
+                    {searchQuery ? 'No friends found' : 
+                     filterOptions.favorites ? 'No favorite friends' : 
+                     filterOptions.online ? 'No friends online' : 
+                     filterOptions.tags.length > 0 ? 'No friends with selected tags' : 
+                     'No friends yet'}
                   </h2>
                   <p className="font-pixelated text-xs text-muted-foreground max-w-sm leading-relaxed">
                     {searchQuery 
                       ? 'Try adjusting your search terms'
-                      : filterFavorites
-                        ? 'Add friends to your favorites list by clicking the star icon'
-                        : filterTags.length > 0
-                          ? 'Try selecting different tags or clear the tag filter'
-                          : 'Start connecting with people by sending friend requests!'
-                    }
+                      : filterOptions.favorites || filterOptions.online || filterOptions.tags.length > 0
+                      ? 'Try adjusting your filters or check back later'
+                      : 'Start connecting with people by sending friend requests!'}
                   </p>
-                  {(filterFavorites || filterTags.length > 0) && friends.length > 0 && (
+                  {(filterOptions.favorites || filterOptions.online || filterOptions.tags.length > 0) && (
                     <Button
-                      onClick={() => {
-                        setFilterFavorites(false);
-                        setFilterTags([]);
-                      }}
+                      onClick={() => setFilterOptions({ favorites: false, online: false, tags: [] })}
                       variant="outline"
                       size="sm"
                       className="mt-4 font-pixelated text-xs"
                     >
-                      <Users className="h-3 w-3 mr-1" />
-                      Show All Friends
+                      <X className="h-3 w-3 mr-2" />
+                      Clear Filters
                     </Button>
                   )}
                 </div>
@@ -1675,9 +1802,13 @@ export function Friends() {
           <TabsContent value="requests" className="h-[calc(100%-60px)] mt-3">
             <ScrollArea className="h-full px-3 scroll-container">
               {filterUsers(requests).length > 0 ? (
-                <div className="space-y-3 pb-3">
+                <div className={`${viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 gap-3' : 'space-y-3'} pb-3`}>
                   {filterUsers(requests).map((request) => (
-                    <UserCard key={request.id} user={request} type="request" />
+                    viewMode === 'grid' ? (
+                      <UserCardGrid key={request.id} user={request} type="request" />
+                    ) : (
+                      <UserCard key={request.id} user={request} type="request" />
+                    )
                   ))}
                 </div>
               ) : (
@@ -1689,8 +1820,7 @@ export function Friends() {
                   <p className="font-pixelated text-xs text-muted-foreground max-w-sm leading-relaxed">
                     {searchQuery 
                       ? 'Try adjusting your search terms'
-                      : 'When people send you friend requests, they\'ll appear here.'
-                    }
+                      : 'When people send you friend requests, they\'ll appear here.'}
                   </p>
                 </div>
               )}
@@ -1700,9 +1830,13 @@ export function Friends() {
           <TabsContent value="suggested" className="h-[calc(100%-60px)] mt-3">
             <ScrollArea className="h-full px-3 scroll-container">
               {filterUsers(suggested).length > 0 ? (
-                <div className="space-y-3 pb-3">
+                <div className={`${viewMode === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 gap-3' : 'space-y-3'} pb-3`}>
                   {filterUsers(suggested).map((suggestion) => (
-                    <UserCard key={suggestion.id} user={suggestion} type="suggested" />
+                    viewMode === 'grid' ? (
+                      <UserCardGrid key={suggestion.id} user={suggestion} type="suggested" />
+                    ) : (
+                      <UserCard key={suggestion.id} user={suggestion} type="suggested" />
+                    )
                   ))}
                 </div>
               ) : (
@@ -1714,19 +1848,8 @@ export function Friends() {
                   <p className="font-pixelated text-xs text-muted-foreground max-w-sm leading-relaxed">
                     {searchQuery 
                       ? 'Try adjusting your search terms'
-                      : 'Check back later for new friend suggestions!'
-                    }
+                      : 'Check back later for new friend suggestions!'}
                   </p>
-                  <Button
-                    onClick={refreshData}
-                    variant="outline"
-                    size="sm"
-                    className="mt-4 font-pixelated text-xs"
-                    disabled={refreshing}
-                  >
-                    <RefreshCw className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-                    Refresh Suggestions
-                  </Button>
                 </div>
               )}
             </ScrollArea>
@@ -1734,6 +1857,10 @@ export function Friends() {
 
           <TabsContent value="search" className="h-[calc(100%-60px)] mt-3">
             <ScrollArea className="h-full px-3 scroll-container">
+              <div className="mb-4">
+                <UserSearch />
+              </div>
+              
               {isSearching ? (
                 <div className="space-y-3 pb-3">
                   {[1, 2, 3].map(i => (
@@ -1775,33 +1902,27 @@ export function Friends() {
                   <p className="font-pixelated text-xs text-muted-foreground max-w-sm leading-relaxed">
                     Enter a name or username to find people
                   </p>
-                  <div className="mt-6 w-full max-w-sm">
-                    <UserSearch />
-                  </div>
                 </div>
               )}
             </ScrollArea>
           </TabsContent>
         </Tabs>
       </div>
-
+      
       {/* Remove Friend Confirmation Dialog */}
-      <AlertDialog 
-        open={showRemoveDialog.show} 
-        onOpenChange={(open) => setShowRemoveDialog({show: open, friend: showRemoveDialog.friend})}
-      >
+      <AlertDialog open={showRemoveDialog.show} onOpenChange={(open) => setShowRemoveDialog({show: open, friend: showRemoveDialog.friend})}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="font-pixelated">Remove Friend</AlertDialogTitle>
             <AlertDialogDescription className="font-pixelated text-xs">
               Are you sure you want to remove {showRemoveDialog.friend?.name} from your friends list? 
-              You'll need to send a new friend request if you want to connect again.
+              This will also remove any tags, notes, and favorite status.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="font-pixelated text-xs">Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => showRemoveDialog.friend && handleRemoveFriend(showRemoveDialog.friend)}
+              onClick={handleRemoveFriend}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated text-xs"
               disabled={!!removingFriend}
             >
@@ -1810,137 +1931,94 @@ export function Friends() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* User Profile Dialog */}
-      <UserProfileDialog
-        open={showUserDialog}
-        onOpenChange={setShowUserDialog}
-        user={selectedUser}
-      />
       
-      {/* Tags Management Dialog */}
-      <Dialog open={showTagsDialog} onOpenChange={setShowTagsDialog}>
+      {/* Create Tag Dialog */}
+      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-pixelated">Manage Tags</DialogTitle>
+            <DialogTitle className="font-pixelated">Create New Tag</DialogTitle>
             <DialogDescription className="font-pixelated text-xs">
-              Create and manage tags to categorize your friends.
+              Create a new tag to organize your friends. Tags can be used to filter and categorize your connections.
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <h3 className="font-pixelated text-sm font-medium">Your Tags</h3>
-              <div className="space-y-2">
-                {friendTags.map(tag => (
-                  <div key={tag.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: tag.color }}></div>
-                      <span className="font-pixelated text-xs">{tag.name}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-6 w-6">
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive">
-                        <Trash className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <label htmlFor="tag-name" className="font-pixelated text-xs">Tag Name</label>
+              <Input
+                id="tag-name"
+                placeholder="Enter tag name"
+                className="font-pixelated text-xs"
+              />
             </div>
             
             <div className="space-y-2">
-              <h3 className="font-pixelated text-sm font-medium">Add New Tag</h3>
-              <div className="flex items-center gap-2">
-                <Input 
-                  placeholder="Tag name" 
-                  className="font-pixelated text-xs h-8"
-                />
-                <div className="flex items-center gap-1">
-                  <div className="w-6 h-6 rounded-full bg-blue-500 cursor-pointer"></div>
-                  <div className="w-6 h-6 rounded-full bg-green-500 cursor-pointer"></div>
-                  <div className="w-6 h-6 rounded-full bg-red-500 cursor-pointer"></div>
-                  <div className="w-6 h-6 rounded-full bg-yellow-500 cursor-pointer"></div>
-                  <div className="w-6 h-6 rounded-full bg-purple-500 cursor-pointer"></div>
-                </div>
-                <Button size="sm" className="h-8 font-pixelated text-xs">
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add
-                </Button>
+              <label className="font-pixelated text-xs">Tag Color</label>
+              <div className="flex flex-wrap gap-2">
+                {['#22c55e', '#3b82f6', '#ec4899', '#f59e0b', '#8b5cf6', '#ef4444', '#14b8a6', '#64748b'].map(color => (
+                  <div
+                    key={color}
+                    className="w-6 h-6 rounded-full cursor-pointer hover:scale-110 transition-transform"
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
               </div>
             </div>
           </div>
           
           <DialogFooter>
-            <Button 
-              onClick={() => setShowTagsDialog(false)}
+            <Button
+              variant="outline"
+              onClick={() => setShowTagDialog(false)}
               className="font-pixelated text-xs"
             >
-              Done
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                createNewTag('Work', '#3b82f6');
+                setShowTagDialog(false);
+              }}
+              className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs`}
+            >
+              Create Tag
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       
-      {/* Friend Notes Dialog */}
-      <Dialog 
-        open={showNotesDialog.show} 
-        onOpenChange={(open) => setShowNotesDialog({show: open, friend: showNotesDialog.friend})}
-      >
+      {/* Friend Note Dialog */}
+      <Dialog open={showNoteDialog} onOpenChange={setShowNoteDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="font-pixelated">
-              {showNotesDialog.friend?.notes ? 'Edit Note' : 'Add Note'}
+              {selectedFriend?.note ? 'Edit Note' : 'Add Note'}
             </DialogTitle>
             <DialogDescription className="font-pixelated text-xs">
-              {showNotesDialog.friend?.notes 
-                ? 'Edit your personal note about this friend.' 
-                : 'Add a personal note about this friend.'}
+              Add a private note about {selectedFriend?.name}. Only you can see this note.
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10">
-                {showNotesDialog.friend?.avatar ? (
-                  <AvatarImage src={showNotesDialog.friend.avatar} alt={showNotesDialog.friend.name} />
-                ) : (
-                  <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-xs">
-                    {showNotesDialog.friend?.name.substring(0, 2).toUpperCase() || 'U'}
-                  </AvatarFallback>
-                )}
-              </Avatar>
-              <div>
-                <h3 className="font-pixelated text-sm font-medium">{showNotesDialog.friend?.name}</h3>
-                <p className="font-pixelated text-xs text-muted-foreground">@{showNotesDialog.friend?.username}</p>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="note" className="font-pixelated text-xs">Note</Label>
-              <Textarea 
-                id="note"
-                placeholder="Add a personal note about this friend..."
-                value={friendNote}
-                onChange={(e) => setFriendNote(e.target.value)}
-                className="font-pixelated text-xs min-h-[100px]"
-              />
-            </div>
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Enter your note here..."
+              className="font-pixelated text-xs min-h-[100px]"
+            />
           </div>
           
           <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setShowNotesDialog({show: false, friend: null})}
+            <Button
+              variant="outline"
+              onClick={() => setShowNoteDialog(false)}
               className="font-pixelated text-xs"
             >
               Cancel
             </Button>
-            <Button 
-              onClick={() => showNotesDialog.friend && updateFriendNote(showNotesDialog.friend.id, friendNote)}
-              className="font-pixelated text-xs"
+            <Button
+              onClick={saveNote}
+              className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs`}
             >
               Save Note
             </Button>
@@ -1948,90 +2026,122 @@ export function Friends() {
         </DialogContent>
       </Dialog>
       
-      {/* About Friends Dialog */}
-      <Dialog open={showInfoDialog} onOpenChange={setShowInfoDialog}>
+      {/* Manage Tags Dialog */}
+      <Dialog open={showTagsDialog} onOpenChange={setShowTagsDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-pixelated">
-              {isCrimson ? (
-                <GradientText gradientColors={['#dc2626', '#b91c1c']}>
-                  About Friends
-                </GradientText>
-              ) : (
-                'About Friends'
-              )}
-            </DialogTitle>
+            <DialogTitle className="font-pixelated">Manage Tags</DialogTitle>
+            <DialogDescription className="font-pixelated text-xs">
+              Select tags for {selectedFriend?.name}. Tags help you organize and filter your friends.
+            </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-2">
-            <p className="font-pixelated text-xs text-muted-foreground">
-              The Friends feature allows you to connect with other users, manage your relationships, and stay in touch.
-            </p>
-            
-            <div className="space-y-3">
-              <div className="flex items-start gap-2">
-                <Star className="h-4 w-4 text-yellow-500 mt-0.5" />
-                <div>
-                  <h3 className="font-pixelated text-xs font-medium">Favorites</h3>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              {friendTags.length > 0 ? (
+                <div className="space-y-2">
+                  {friendTags.map(tag => (
+                    <div key={tag.id} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id={`tag-${tag.id}`}
+                        checked={selectedTags.includes(tag.name)}
+                        onChange={() => {
+                          if (selectedTags.includes(tag.name)) {
+                            setSelectedTags(selectedTags.filter(t => t !== tag.name));
+                          } else {
+                            setSelectedTags([...selectedTags, tag.name]);
+                          }
+                        }}
+                        className="mr-2"
+                      />
+                      <label htmlFor={`tag-${tag.id}`} className="font-pixelated text-xs flex items-center">
+                        <div 
+                          className="w-3 h-3 rounded-full mr-2" 
+                          style={{ backgroundColor: tag.color }}
+                        ></div>
+                        {tag.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4">
                   <p className="font-pixelated text-xs text-muted-foreground">
-                    Mark friends as favorites for quick access. Filter to show only your favorite friends.
+                    You haven't created any tags yet.
                   </p>
                 </div>
-              </div>
-              
-              <div className="flex items-start gap-2">
-                <Tag className="h-4 w-4 text-blue-500 mt-0.5" />
-                <div>
-                  <h3 className="font-pixelated text-xs font-medium">Tags</h3>
-                  <p className="font-pixelated text-xs text-muted-foreground">
-                    Organize friends with custom tags like "Close Friends," "Work," or "Family."
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-2">
-                <Bookmark className="h-4 w-4 text-purple-500 mt-0.5" />
-                <div>
-                  <h3 className="font-pixelated text-xs font-medium">Notes</h3>
-                  <p className="font-pixelated text-xs text-muted-foreground">
-                    Add personal notes about your friends that only you can see.
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-2">
-                <MessageCircle className="h-4 w-4 text-green-500 mt-0.5" />
-                <div>
-                  <h3 className="font-pixelated text-xs font-medium">Chat</h3>
-                  <p className="font-pixelated text-xs text-muted-foreground">
-                    Start conversations directly from the friends list.
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-2">
-                <Shield className="h-4 w-4 text-red-500 mt-0.5" />
-                <div>
-                  <h3 className="font-pixelated text-xs font-medium">Privacy</h3>
-                  <p className="font-pixelated text-xs text-muted-foreground">
-                    Your friend list is private. Only you can see your connections and notes.
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
+            
+            <Button
+              onClick={() => {
+                setShowTagsDialog(false);
+                setShowTagDialog(true);
+              }}
+              variant="outline"
+              className="w-full font-pixelated text-xs"
+            >
+              <Plus className="h-3 w-3 mr-2" />
+              Create New Tag
+            </Button>
           </div>
           
           <DialogFooter>
-            <Button 
-              onClick={() => setShowInfoDialog(false)}
+            <Button
+              variant="outline"
+              onClick={() => setShowTagsDialog(false)}
               className="font-pixelated text-xs"
             >
-              Got it
+              Cancel
+            </Button>
+            <Button
+              onClick={saveTags}
+              className={`${isCrimson ? 'bg-red-600 hover:bg-red-700' : 'bg-social-green hover:bg-social-light-green'} text-white font-pixelated text-xs`}
+            >
+              Save Tags
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </DashboardLayout>
+  );
+}
+
+function Textarea({ id, value, onChange, placeholder, className }: { 
+  id?: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <textarea
+      id={id}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+    />
+  );
+}
+
+function MoreVertical({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="19" r="1" />
+    </svg>
   );
 }
 

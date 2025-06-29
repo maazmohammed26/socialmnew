@@ -537,7 +537,7 @@ export function UserSearch() {
   );
 }
 
-function Settings({ className }: { className?: string }) {
+function Check({ className }: { className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -549,123 +549,7 @@ function Settings({ className }: { className?: string }) {
       strokeLinejoin="round"
       className={className}
     >
-      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-      <circle cx="12" cy="12" r="3" />
+      <polyline points="20 6 9 17 4 12" />
     </svg>
-  );
-}
-
-function Pencil({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-      <path d="m15 5 4 4" />
-    </svg>
-  );
-}
-
-function Trash({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M3 6h18" />
-      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-    </svg>
-  );
-}
-
-function Plus({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M12 5v14" />
-      <path d="M5 12h14" />
-    </svg>
-  );
-}
-
-function LayoutGrid({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <rect width="7" height="7" x="3" y="3" rx="1" />
-      <rect width="7" height="7" x="14" y="3" rx="1" />
-      <rect width="7" height="7" x="14" y="14" rx="1" />
-      <rect width="7" height="7" x="3" y="14" rx="1" />
-    </svg>
-  );
-}
-
-function List({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <line x1="8" x2="21" y1="6" y2="6" />
-      <line x1="8" x2="21" y1="12" y2="12" />
-      <line x1="8" x2="21" y1="18" y2="18" />
-      <line x1="3" x2="3.01" y1="6" y2="6" />
-      <line x1="3" x2="3.01" y1="12" y2="12" />
-      <line x1="3" x2="3.01" y1="18" y2="18" />
-    </svg>
-  );
-}
-
-function Textarea({ id, value, onChange, placeholder, className }: { 
-  id?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  placeholder?: string;
-  className?: string;
-}) {
-  return (
-    <textarea
-      id={id}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-    />
   );
 }
