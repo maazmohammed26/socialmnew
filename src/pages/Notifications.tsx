@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ export function Notifications() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const fetchNotifications = async (showLoading = true) => {
@@ -392,7 +393,10 @@ export function Notifications() {
         </div>
 
         {/* Content */}
-        <ScrollArea className="h-[calc(100vh-180px)] p-4 scroll-container scroll-smooth">
+        <ScrollArea 
+          className="h-[calc(100vh-180px)] p-4 scroll-container scroll-smooth" 
+          viewportRef={scrollAreaRef}
+        >
           {notifications.length > 0 ? (
             <div className="space-y-3 pb-4">
               {notifications.map((notification) => (
