@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { UserPlus, Search, Clock, X, UserCheck, Filter, Users, Star, Zap } from 'lucide-react';
+import { UserPlus, Clock, X, UserCheck, Filter, Users, Star, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { UserProfileDialog } from '@/components/user/UserProfileDialog';
@@ -290,13 +290,12 @@ export function UserSearch() {
               />
             ) : (
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
                   placeholder="Search by name or username..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full font-pixelated text-xs h-8 pl-9 pr-9 transition-all duration-200 focus:ring-2 focus:ring-social-green"
+                  className="w-full font-pixelated text-xs h-8 pr-9 transition-all duration-200 focus:ring-2 focus:ring-social-green"
                   onFocus={() => {
                     if (searchTerm.trim().length === 0) {
                       setShowRecentSearches(true);

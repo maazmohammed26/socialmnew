@@ -4,7 +4,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Bell, Check, Trash2, User, MessageCircle, Heart, UserPlus, Info, CheckCheck, X, Wifi, WifiOff, UserX, Settings, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -72,6 +71,15 @@ export function Notifications() {
           reference_id: null,
           read: false,
           created_at: new Date(Date.now() - 1000).toISOString(),
+        },
+        {
+          id: 'pixel-theme',
+          user_id: user.id,
+          type: 'system',
+          content: "Don't like the pixel font? No worries! Just go to Profile settings and change the theme.",
+          reference_id: null,
+          read: false,
+          created_at: new Date().toISOString(),
         }
       ];
       
@@ -92,6 +100,15 @@ export function Notifications() {
           reference_id: null,
           read: false,
           created_at: new Date(Date.now() - 1000).toISOString(),
+        },
+        {
+          id: 'pixel-theme',
+          user_id: 'static',
+          type: 'system',
+          content: "Don't like the pixel font? No worries! Just go to Profile settings and change the theme.",
+          reference_id: null,
+          read: false,
+          created_at: new Date().toISOString(),
         }
       ];
       

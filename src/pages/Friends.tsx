@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Users, UserPlus, UserCheck, MessageCircle, UserMinus, Clock, X, AlertTriangle, Search } from 'lucide-react';
+import { Users, UserPlus, UserCheck, MessageCircle, UserMinus, Clock, X, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -754,12 +754,11 @@ export function Friends() {
               />
             ) : (
               <div className="relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by name or username..."
                   value={searchQuery}
                   onChange={handleSearch}
-                  className="font-pixelated text-xs h-8 pl-8"
+                  className="font-pixelated text-xs h-8"
                 />
               </div>
             )}
@@ -904,7 +903,7 @@ export function Friends() {
                 </div>
               ) : searchQuery.length >= 2 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                  <Search className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                  <AlertTriangle className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
                   <h2 className="font-pixelated text-sm font-medium mb-2">
                     No users found
                   </h2>
@@ -914,7 +913,7 @@ export function Friends() {
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                  <Search className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                  <Users className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
                   <h2 className="font-pixelated text-sm font-medium mb-2">
                     Search for friends
                   </h2>
