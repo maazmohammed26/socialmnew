@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink, MapPin, User } from 'lucide-react';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -43,34 +43,9 @@ interface UserProfileData {
   color_theme?: string;
 }
 
-interface UserStats {
-  posts: number;
-  friends: number;
-  likes: number;
-  views: number;
-  comments: number;
-}
-
-interface UserActivity {
-  type: 'post' | 'comment' | 'like' | 'friend' | 'profile';
-  content: string;
-  timestamp: string;
-}
-
-interface Post {
-  id: string;
-  content: string;
-  image_url: string | null;
-  created_at: string;
-  updated_at: string;
-  user_id: string;
-  likes_count: number;
-  comments_count: number;
-}
-
 export default function UserProfile() {
   const [user, setUser] = useState<UserProfileData | null>(null);
-  const [stats, setStats] = useState<UserStats>({ posts: 0, friends: 0, likes: 0, views: 0, comments: 0 });
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -82,12 +57,9 @@ export default function UserProfile() {
     location: '',
     website: ''
   });
-  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('profile');
-  const [recentActivity, setRecentActivity] = useState<UserActivity[]>([]);
   const [accountCreationDate, setAccountCreationDate] = useState<string>('');
   const [profileUrl, setProfileUrl] = useState<string>('');
-  const [userPosts, setUserPosts] = useState<Post[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -120,18 +92,12 @@ export default function UserProfile() {
 
   useEffect(() => {
     fetchUserProfile();
-    fetchUserStats();
-    fetchRecentActivity();
-    fetchUserPosts();
   }, []);
 
   const fetchUserProfile = async () => {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) {
-        setIsLoading(false);
-        return;
-      }
+      if (!authUser) return;
 
       const { data, error } = await supabase
         .from('profiles')
@@ -170,199 +136,7 @@ export default function UserProfile() {
         description: 'Failed to load profile',
       });
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const fetchUserStats = async () => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-
-      // Get posts count
-      const { count: postsCount } = await supabase
-        .from('posts')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', authUser.id);
-
-      // Get friends count
-      const { count: friendsCount } = await supabase
-        .from('friends')
-        .select('*', { count: 'exact', head: true })
-        .or(`sender_id.eq.${authUser.id},receiver_id.eq.${authUser.id}`)
-        .eq('status', 'accepted');
-
-      // Get likes received count
-      const { data: userPosts } = await supabase
-        .from('posts')
-        .select('id')
-        .eq('user_id', authUser.id);
-
-      let likesCount = 0;
-      let commentsCount = 0;
-      let viewsCount = 0;
-      
-      if (userPosts && userPosts.length > 0) {
-        // Get likes count
-        const { count: likes } = await supabase
-          .from('likes')
-          .select('*', { count: 'exact', head: true })
-          .in('post_id', userPosts.map(post => post.id));
-        
-        likesCount = likes || 0;
-        
-        // Get comments count
-        const { count: comments } = await supabase
-          .from('comments')
-          .select('*', { count: 'exact', head: true })
-          .in('post_id', userPosts.map(post => post.id));
-          
-        commentsCount = comments || 0;
-        
-        // Get story views count
-        const { data: stories } = await supabase
-          .from('stories')
-          .select('views_count')
-          .eq('user_id', authUser.id);
-          
-        if (stories && stories.length > 0) {
-          viewsCount = stories.reduce((total, story) => total + (story.views_count || 0), 0);
-        }
-      }
-
-      setStats({
-        posts: postsCount || 0,
-        friends: friendsCount || 0,
-        likes: likesCount,
-        comments: commentsCount,
-        views: viewsCount
-      });
-    } catch (error) {
-      console.error('Error fetching user stats:', error);
-    }
-  };
-  
-  const fetchRecentActivity = async () => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-      
-      // Get recent posts
-      const { data: recentPosts } = await supabase
-        .from('posts')
-        .select('content, created_at')
-        .eq('user_id', authUser.id)
-        .order('created_at', { ascending: false })
-        .limit(3);
-        
-      // Get recent comments
-      const { data: recentComments } = await supabase
-        .from('comments')
-        .select('content, created_at')
-        .eq('user_id', authUser.id)
-        .order('created_at', { ascending: false })
-        .limit(2);
-        
-      // Get recent friend connections
-      const { data: recentFriends } = await supabase
-        .from('friends')
-        .select(`
-          created_at,
-          profiles:sender_id!inner(name),
-          profiles2:receiver_id!inner(name)
-        `)
-        .or(`sender_id.eq.${authUser.id},receiver_id.eq.${authUser.id}`)
-        .eq('status', 'accepted')
-        .order('created_at', { ascending: false })
-        .limit(2);
-        
-      // Combine and sort activities
-      const activities: UserActivity[] = [];
-      
-      if (recentPosts) {
-        recentPosts.forEach(post => {
-          activities.push({
-            type: 'post',
-            content: post.content.length > 50 ? post.content.substring(0, 50) + '...' : post.content,
-            timestamp: post.created_at
-          });
-        });
-      }
-      
-      if (recentComments) {
-        recentComments.forEach(comment => {
-          activities.push({
-            type: 'comment',
-            content: comment.content.length > 50 ? comment.content.substring(0, 50) + '...' : comment.content,
-            timestamp: comment.created_at
-          });
-        });
-      }
-      
-      if (recentFriends) {
-        recentFriends.forEach(friend => {
-          const friendName = friend.sender_id === authUser.id ? friend.profiles2.name : friend.profiles.name;
-          activities.push({
-            type: 'friend',
-            content: `You became friends with ${friendName}`,
-            timestamp: friend.created_at
-          });
-        });
-      }
-      
-      // Sort by timestamp (newest first)
-      activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      
-      setRecentActivity(activities);
-    } catch (error) {
-      console.error('Error fetching recent activity:', error);
-    }
-  };
-
-  const fetchUserPosts = async () => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-
-      // Get user posts with likes and comments count
-      const { data: posts, error } = await supabase
-        .from('posts')
-        .select(`
-          id,
-          content,
-          image_url,
-          created_at,
-          updated_at,
-          user_id
-        `)
-        .eq('user_id', authUser.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (error) throw error;
-
-      // Get likes and comments count for each post
-      const postsWithCounts = await Promise.all(posts.map(async (post) => {
-        const { count: likesCount } = await supabase
-          .from('likes')
-          .select('*', { count: 'exact', head: true })
-          .eq('post_id', post.id);
-
-        const { count: commentsCount } = await supabase
-          .from('comments')
-          .select('*', { count: 'exact', head: true })
-          .eq('post_id', post.id);
-
-        return {
-          ...post,
-          likes_count: likesCount || 0,
-          comments_count: commentsCount || 0
-        };
-      }));
-
-      setUserPosts(postsWithCounts);
-    } catch (error) {
-      console.error('Error fetching user posts:', error);
+      setLoading(false);
     }
   };
 
@@ -469,7 +243,7 @@ export default function UserProfile() {
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="max-w-2xl mx-auto space-y-4">
         <Card className="animate-pulse">
@@ -694,34 +468,6 @@ export default function UserProfile() {
             </CardHeader>
           </Card>
 
-          {/* Stats Card */}
-          <Card className="card-gradient">
-            <CardContent className="p-4">
-              <div className="grid grid-cols-5 gap-2 text-center">
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.posts}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Posts</p>
-                </div>
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.friends}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Friends</p>
-                </div>
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.likes}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Likes</p>
-                </div>
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.comments}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Comments</p>
-                </div>
-                <div className="space-y-1">
-                  <p className={`text-lg font-pixelated ${isCrimson ? 'text-red-600' : 'text-social-green'}`}>{stats.views}</p>
-                  <p className="text-xs text-muted-foreground font-pixelated">Views</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
           {/* Account Info */}
           <Card className="card-gradient">
             <CardContent className="p-4">
@@ -769,136 +515,58 @@ export default function UserProfile() {
             <CardContent className="p-4">
               <h3 className="font-pixelated text-sm font-medium mb-3">Recent Activity</h3>
               
-              {recentActivity.length > 0 ? (
-                <div className="space-y-3">
-                  {recentActivity.map((activity, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                      {activity.type === 'post' && <MessageCircle className="h-4 w-4 text-social-green mt-0.5" />}
-                      {activity.type === 'comment' && <MessageCircle className="h-4 w-4 text-social-blue mt-0.5" />}
-                      {activity.type === 'like' && <Heart className="h-4 w-4 text-social-magenta mt-0.5" />}
-                      {activity.type === 'friend' && <Users className="h-4 w-4 text-social-purple mt-0.5" />}
-                      
-                      <div className="flex-1">
-                        <p className="font-pixelated text-xs">{activity.content}</p>
-                        <p className="font-pixelated text-xs text-muted-foreground mt-1">
-                          {formatTimeAgo(new Date(activity.timestamp))}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+                  <MessageCircle className="h-4 w-4 text-social-green mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-pixelated text-xs">
+                      Posted a new update <span className="text-muted-foreground">2 days ago</span>
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <div className="text-center py-6">
-                  <p className="font-pixelated text-sm text-muted-foreground">No recent activity to show</p>
+                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+                  <MessageCircle className="h-4 w-4 text-social-blue mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-pixelated text-xs">
+                      Commented on a post <span className="text-muted-foreground">5 days ago</span>
+                    </p>
+                  </div>
                 </div>
-              )}
+                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+                  <Users className="h-4 w-4 text-social-purple mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-pixelated text-xs">
+                      Made a new friend <span className="text-muted-foreground">1 week ago</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
           
-          {/* User Posts */}
+          {/* Popular Posts */}
           <Card className="card-gradient">
             <CardContent className="p-4">
               <h3 className="font-pixelated text-sm font-medium mb-3">Your Posts</h3>
               
-              {userPosts.length > 0 ? (
-                <div className="space-y-3">
-                  {userPosts.map((post) => (
-                    <div key={post.id} className="p-3 bg-muted/30 rounded-lg">
-                      <p className="font-pixelated text-xs">
-                        {post.content.length > 100 ? post.content.substring(0, 100) + '...' : post.content}
-                      </p>
-                      {post.image_url && (
-                        <div className="mt-2 mb-2">
-                          <img 
-                            src={post.image_url} 
-                            alt="Post image" 
-                            className="w-full h-32 object-cover rounded-md"
-                          />
-                        </div>
-                      )}
-                      <div className="flex items-center gap-4 mt-2">
-                        <div className="flex items-center gap-1">
-                          <Heart className="h-3 w-3 text-social-magenta" />
-                          <span className="text-xs text-muted-foreground font-pixelated">{post.likes_count}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <MessageCircle className="h-3 w-3 text-social-blue" />
-                          <span className="text-xs text-muted-foreground font-pixelated">{post.comments_count}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground font-pixelated">
-                          {formatTimeAgo(new Date(post.created_at))}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {userPosts.length > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full font-pixelated text-xs"
-                      onClick={() => navigate('/dashboard')}
-                    >
-                      View All Posts
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <p className="font-pixelated text-sm text-muted-foreground">You haven't created any posts yet</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 font-pixelated text-xs"
-                    onClick={() => navigate('/dashboard')}
-                  >
-                    Create Your First Post
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* Friends Preview */}
-          <Card className="card-gradient">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-pixelated text-sm font-medium">Friends</h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2 font-pixelated text-xs"
-                  onClick={() => navigate('/friends')}
-                >
-                  View All
-                </Button>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-2">
-                {stats.friends > 0 ? (
-                  Array.from({ length: Math.min(3, stats.friends) }).map((_, i) => (
-                    <div key={i} className="flex flex-col items-center gap-1">
-                      <Avatar className="w-16 h-16 border-2 border-social-green/20">
-                        <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-sm">
-                          F{i+1}
-                        </AvatarFallback>
-                      </Avatar>
-                      <p className="font-pixelated text-xs text-center truncate w-full">Friend {i+1}</p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="col-span-3 text-center py-4">
-                    <p className="font-pixelated text-xs text-muted-foreground">No friends yet</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 font-pixelated text-xs"
-                      onClick={() => navigate('/friends')}
-                    >
-                      Find Friends
-                    </Button>
+              <div className="space-y-3">
+                <div className="p-3 bg-muted/30 rounded-lg">
+                  <p className="font-pixelated text-xs">
+                    "Just had an amazing day at the beach! 🏖️ #summer #fun"
+                  </p>
+                  <div className="flex items-center gap-4 mt-2">
+                    <span className="text-xs text-muted-foreground font-pixelated">2 days ago</span>
                   </div>
-                )}
+                </div>
+                
+                <div className="p-3 bg-muted/30 rounded-lg">
+                  <p className="font-pixelated text-xs">
+                    "Check out this amazing sunset view from my window! 🌅 #nofilter"
+                  </p>
+                  <div className="flex items-center gap-4 mt-2">
+                    <span className="text-xs text-muted-foreground font-pixelated">1 week ago</span>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1033,42 +701,4 @@ export default function UserProfile() {
       />
     </div>
   );
-}
-
-// Helper function to format time ago
-function formatTimeAgo(date: Date): string {
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  
-  if (diffInSeconds < 60) {
-    return 'just now';
-  }
-  
-  const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) {
-    return `${diffInMinutes} minute${diffInMinutes !== 1 ? 's' : ''} ago`;
-  }
-  
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) {
-    return `${diffInHours} hour${diffInHours !== 1 ? 's' : ''} ago`;
-  }
-  
-  const diffInDays = Math.floor(diffInHours / 24);
-  if (diffInDays < 7) {
-    return `${diffInDays} day${diffInDays !== 1 ? 's' : ''} ago`;
-  }
-  
-  const diffInWeeks = Math.floor(diffInDays / 7);
-  if (diffInWeeks < 4) {
-    return `${diffInWeeks} week${diffInWeeks !== 1 ? 's' : ''} ago`;
-  }
-  
-  const diffInMonths = Math.floor(diffInDays / 30);
-  if (diffInMonths < 12) {
-    return `${diffInMonths} month${diffInMonths !== 1 ? 's' : ''} ago`;
-  }
-  
-  const diffInYears = Math.floor(diffInDays / 365);
-  return `${diffInYears} year${diffInYears !== 1 ? 's' : ''} ago`;
 }
