@@ -137,7 +137,7 @@ export const loginUser = async (email: string, password: string) => {
 };
 
 /**
- * Sign in with Google
+ * Sign in with Google - Improved implementation
  */
 export const signInWithGoogle = async () => {
   try {

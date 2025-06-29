@@ -31,11 +31,12 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 // Components
 import { AuthGuard } from "./components/common/AuthGuard";
 
+// Create a client with performance optimizations
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,
-      cacheTime: 1000 * 60 * 30,
+      staleTime: 1000 * 60 * 5, // Data is fresh for 5 minutes
+      cacheTime: 1000 * 60 * 30, // Cache persists for 30 minutes
       refetchOnWindowFocus: false,
       retry: 1,
     },

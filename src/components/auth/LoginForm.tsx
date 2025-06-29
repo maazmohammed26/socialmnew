@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { loginUser } from '@/utils/authUtils';
+import { loginUser, signInWithGoogle } from '@/utils/authUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { Eye, EyeOff, Mail } from 'lucide-react';
 
@@ -78,31 +78,13 @@ export function LoginForm() {
       setGoogleLoading(true);
       setError('');
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        }
-      });
-
-      if (error) {
-        console.error('Google login error:', error);
-        
-        if (error.message?.includes('Email not confirmed')) {
-          setError('Please verify your email address before logging in.');
-        } else if (error.message?.includes('already registered')) {
-          setError('An account with this Google email already exists. Please try logging in normally.');
-        } else {
-          setError('Google login failed. Please try again or use email/password login.');
-        }
-      }
+      // Use the improved Google sign-in function
+      await signInWithGoogle();
+      
+      // Note: The redirect happens automatically, so we don't need to navigate
     } catch (error: any) {
       console.error('Google login error:', error);
-      setError('Google login failed. Please try again.');
+      setError('Google login failed. Please try again or use email/password login.');
     } finally {
       setGoogleLoading(false);
     }

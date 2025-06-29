@@ -35,6 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { GradientText, GlowEffect } from '@/components/ui/crimson-effects';
 
 interface MobileTab {
   path: string;

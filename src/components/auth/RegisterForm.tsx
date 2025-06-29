@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { signInWithGoogle, registerUser } from '@/utils/authUtils';
 
 export function RegisterForm() {
   const [email, setEmail] = useState('');
@@ -124,25 +125,10 @@ export function RegisterForm() {
         throw new Error('Please accept the terms and conditions');
       }
 
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            name: name.trim(),
-            username: username.toLowerCase().trim(),
-          },
-        },
-      });
+      // Use the improved registration function
+      const { user } = await registerUser(email, password, name, username);
 
-      if (error) {
-        if (error.message?.includes('already registered')) {
-          throw new Error('An account with this email already exists. Please try logging in instead.');
-        }
-        throw error;
-      }
-
-      if (data.user) {
+      if (user) {
         setRegistrationSuccess(true);
         toast({
           title: 'Registration successful!',
@@ -164,41 +150,17 @@ export function RegisterForm() {
   const handleGoogleSignup = async () => {
     try {
       setGoogleLoading(true);
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        }
-      });
-
-      if (error) {
-        console.error('Google signup error:', error);
-        
-        if (error.message?.includes('already registered')) {
-          toast({
-            variant: 'destructive',
-            title: 'Account already exists',
-            description: 'An account with this Google email already exists. Please try logging in instead.',
-          });
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Google signup failed',
-            description: 'Please try again or use email/password registration.',
-          });
-        }
-      }
+      
+      // Use the improved Google sign-in function
+      await signInWithGoogle();
+      
+      // Note: The redirect happens automatically, so we don't need to navigate
     } catch (error: any) {
       console.error('Google signup error:', error);
       toast({
         variant: 'destructive',
         title: 'Google signup failed',
-        description: 'Please try again.',
+        description: 'Please try again or use email/password registration.',
       });
     } finally {
       setGoogleLoading(false);
