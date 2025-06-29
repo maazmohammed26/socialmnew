@@ -47,6 +47,7 @@ interface UserActivity {
   type: 'post' | 'comment' | 'like' | 'friend' | 'profile';
   content: string;
   timestamp: string;
+  postId?: string;
 }
 
 export default function UserProfile() {
@@ -66,7 +67,6 @@ export default function UserProfile() {
   const [activeTab, setActiveTab] = useState('profile');
   const [recentActivity, setRecentActivity] = useState<UserActivity[]>([]);
   const [accountCreationDate, setAccountCreationDate] = useState<string>('');
-  const [profileUrl, setProfileUrl] = useState<string>('');
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -135,9 +135,6 @@ export default function UserProfile() {
           month: 'long',
           day: 'numeric'
         }));
-        
-        // Set profile URL
-        setProfileUrl(`${window.location.origin}/profile/${data.username}`);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -159,23 +156,24 @@ export default function UserProfile() {
       // Get recent posts
       const { data: recentPosts } = await supabase
         .from('posts')
-        .select('content, created_at')
+        .select('id, content, created_at')
         .eq('user_id', authUser.id)
         .order('created_at', { ascending: false })
-        .limit(3);
+        .limit(5);
         
       // Get recent comments
       const { data: recentComments } = await supabase
         .from('comments')
-        .select('content, created_at')
+        .select('id, content, post_id, created_at')
         .eq('user_id', authUser.id)
         .order('created_at', { ascending: false })
-        .limit(2);
+        .limit(3);
         
       // Get recent friend connections
       const { data: recentFriends } = await supabase
         .from('friends')
         .select(`
+          id,
           created_at,
           profiles:sender_id!inner(name),
           profiles2:receiver_id!inner(name)
@@ -183,7 +181,7 @@ export default function UserProfile() {
         .or(`sender_id.eq.${authUser.id},receiver_id.eq.${authUser.id}`)
         .eq('status', 'accepted')
         .order('created_at', { ascending: false })
-        .limit(2);
+        .limit(3);
         
       // Combine and sort activities
       const activities: UserActivity[] = [];
@@ -193,7 +191,8 @@ export default function UserProfile() {
           activities.push({
             type: 'post',
             content: post.content.length > 50 ? post.content.substring(0, 50) + '...' : post.content,
-            timestamp: post.created_at
+            timestamp: post.created_at,
+            postId: post.id
           });
         });
       }
@@ -203,7 +202,8 @@ export default function UserProfile() {
           activities.push({
             type: 'comment',
             content: comment.content.length > 50 ? comment.content.substring(0, 50) + '...' : comment.content,
-            timestamp: comment.created_at
+            timestamp: comment.created_at,
+            postId: comment.post_id
           });
         });
       }
@@ -244,7 +244,7 @@ export default function UserProfile() {
         `)
         .eq('user_id', authUser.id)
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(10);
         
       if (error) throw error;
       
@@ -338,23 +338,6 @@ export default function UserProfile() {
 
   const handleAccountDeleted = () => {
     navigate('/login');
-  };
-  
-  const copyProfileLink = async () => {
-    try {
-      await navigator.clipboard.writeText(profileUrl);
-      toast({
-        title: 'Link copied',
-        description: 'Your profile link has been copied to clipboard',
-      });
-    } catch (error) {
-      console.error('Error copying to clipboard:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to copy link to clipboard',
-      });
-    }
   };
   
   const handlePostClick = (postId: string) => {
@@ -648,7 +631,11 @@ export default function UserProfile() {
                 {filteredActivity.length > 0 ? (
                   <div className="space-y-3">
                     {filteredActivity.map((activity, index) => (
-                      <div key={index} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+                      <div 
+                        key={index} 
+                        className={`flex items-start gap-3 p-3 bg-muted/30 rounded-lg ${activity.postId ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                        onClick={activity.postId ? () => handlePostClick(activity.postId) : undefined}
+                      >
                         {activity.type === 'post' && <MessageCircle className="h-4 w-4 text-social-green mt-0.5" />}
                         {activity.type === 'comment' && <MessageCircle className="h-4 w-4 text-social-blue mt-0.5" />}
                         {activity.type === 'like' && <Heart className="h-4 w-4 text-social-magenta mt-0.5" />}
