@@ -1,311 +1,257 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+interface Notification {
+  id: string;
+  type: string;
+  content: string;
+  reference_id: string | null;
+  read: boolean;
+  created_at: string;
+  user_id: string;
+}
+
 export function useNotifications() {
-  const [isGranted, setIsGranted] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    // Check if browser supports notifications
-    if ('Notification' in window) {
-      // Check if permission is already granted
-      if (Notification.permission === 'granted') {
-        setIsGranted(true);
-      } else if (Notification.permission !== 'denied') {
-        // Request permission
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            setIsGranted(true);
-          }
-        });
+  // Get current user
+  const getCurrentUser = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUser(user);
+        return user;
       }
-    }
-
-    // Check for service worker support
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      try {
-        // Register service worker for push notifications
-        navigator.serviceWorker.ready.then(registration => {
-          console.log('Service Worker is ready for push notifications');
-        });
-      } catch (error) {
-        console.error('Error setting up service worker:', error);
-      }
+      return null;
+    } catch (error) {
+      console.error('Error getting current user:', error);
+      return null;
     }
   }, []);
 
-  // Send a notification with proper fallbacks
-  const sendNotification = useCallback((title: string, options?: NotificationOptions) => {
-    // First try to show a notification via the Notifications API
-    if (isGranted && 'Notification' in window) {
-      try {
-        const notification = new Notification(title, {
-          ...options,
-          icon: options?.icon || '/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png',
-          badge: '/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png',
-          requireInteraction: false,
-          silent: false
-        });
-        
-        // Add click handler to notification
-        notification.onclick = function() {
-          window.focus();
-          notification.close();
-        };
-        
-        // Auto close after 5 seconds
-        setTimeout(() => {
-          notification.close();
-        }, 5000);
-        
-        return notification;
-      } catch (error) {
-        console.error('Error showing notification:', error);
-      }
-    }
-    
-    // If native notification fails or isn't available, use toast as fallback
-    toast({
-      title,
-      description: options?.body,
-      className: 'toast-notification',
-    });
-    
-    return null;
-  }, [isGranted, toast]);
+  // Fetch notifications
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoading(true);
+      const user = await getCurrentUser();
+      if (!user) return;
 
-  // Create notification in database
-  const createNotification = useCallback(async (userId: string, type: string, content: string, referenceId?: string) => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setNotifications(data || []);
+      setUnreadCount(data?.filter(n => !n.read).length || 0);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to load notifications'
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [getCurrentUser, toast]);
+
+  // Mark notification as read
+  const markAsRead = useCallback(async (notificationId: string) => {
     try {
       const { error } = await supabase
         .from('notifications')
-        .insert({
-          user_id: userId,
-          type,
-          content,
-          reference_id: referenceId || null,
-          read: false
-        });
+        .update({ read: true })
+        .eq('id', notificationId);
 
       if (error) throw error;
+
+      setNotifications(prev =>
+        prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to update notification'
+      });
+    }
+  }, [toast]);
+
+  // Mark all as read
+  const markAllAsRead = useCallback(async () => {
+    try {
+      if (!currentUser) return;
+
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('user_id', currentUser.id)
+        .eq('read', false);
+
+      if (error) throw error;
+
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+
+      toast({
+        title: 'Success',
+        description: 'All notifications marked as read'
+      });
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to update notifications'
+      });
+    }
+  }, [currentUser, toast]);
+
+  // Delete notification
+  const deleteNotification = useCallback(async (notificationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', notificationId);
+
+      if (error) throw error;
+
+      const notificationToDelete = notifications.find(n => n.id === notificationId);
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      
+      if (notificationToDelete && !notificationToDelete.read) {
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Notification deleted'
+      });
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to delete notification'
+      });
+    }
+  }, [notifications, toast]);
+
+  // Clear all notifications
+  const clearAllNotifications = useCallback(async () => {
+    try {
+      if (!currentUser) return;
+
+      const { error } = await supabase
+        .from('notifications')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('user_id', currentUser.id)
+        .is('deleted_at', null);
+
+      if (error) throw error;
+
+      setNotifications([]);
+      setUnreadCount(0);
+
+      toast({
+        title: 'Success',
+        description: 'All notifications cleared'
+      });
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to clear notifications'
+      });
+    }
+  }, [currentUser, toast]);
+
+  // Create notification
+  const createNotification = useCallback(async (
+    type: string,
+    content: string,
+    referenceId?: string
+  ) => {
+    try {
+      if (!currentUser) return null;
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: currentUser.id,
+          type,
+          content,
+          reference_id: referenceId,
+          read: false
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update local state
+      setNotifications(prev => [data, ...prev]);
+      setUnreadCount(prev => prev + 1);
+
+      return data;
     } catch (error) {
       console.error('Error creating notification:', error);
+      return null;
     }
-  }, []);
+  }, [currentUser]);
 
-  // Setup message notifications subscription
-  const setupMessageNotifications = useCallback((userId: string) => {
-    return supabase
-      .channel('messages-notifications')
+  // Set up real-time subscription
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const channel = supabase
+      .channel('notifications-changes')
       .on('postgres_changes', 
         { 
-          event: 'INSERT', 
+          event: '*', 
           schema: 'public', 
-          table: 'messages',
-          filter: `receiver_id=eq.${userId}`
+          table: 'notifications',
+          filter: `user_id=eq.${currentUser.id}`
         }, 
-        async (payload) => {
-          try {
-            // Get sender details
-            const { data: senderData } = await supabase
-              .from('profiles')
-              .select('name')
-              .eq('id', payload.new.sender_id)
-              .single();
-
-            if (senderData) {
-              // Create notification in database
-              await createNotification(
-                userId,
-                'message',
-                `${senderData.name} sent you a message`,
-                payload.new.id
-              );
-
-              // Show push notification
-              sendNotification(`New message from ${senderData.name}`, {
-                body: payload.new.content.substring(0, 60) + (payload.new.content.length > 60 ? '...' : ''),
-                tag: 'message',
-                requireInteraction: true,
-              });
-            }
-          } catch (error) {
-            console.error('Error sending notification:', error);
-          }
-        }
-      )
-      .subscribe();
-  }, [sendNotification, createNotification]);
-
-  // Setup for friend request notifications
-  const setupFriendRequestNotifications = useCallback((userId: string) => {
-    return supabase
-      .channel('friend-request-notifications')
-      .on('postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'friends',
-          filter: `receiver_id=eq.${userId}`
-        },
-        async (payload) => {
-          try {
-            // Get sender details
-            const { data: senderData } = await supabase
-              .from('profiles')
-              .select('name')
-              .eq('id', payload.new.sender_id)
-              .single();
-
-            if (senderData) {
-              // Create notification in database
-              await createNotification(
-                userId,
-                'friend_request',
-                `${senderData.name} sent you a friend request`,
-                payload.new.id
-              );
-
-              // Show push notification
-              sendNotification(`New Friend Request`, {
-                body: `${senderData.name} sent you a friend request`,
-                tag: 'friend-request',
-              });
-            }
-          } catch (error) {
-            console.error('Error sending friend request notification:', error);
-          }
-        }
-      )
-      .subscribe();
-  }, [sendNotification, createNotification]);
-
-  // Setup for post notifications (likes and comments)
-  const setupPostNotifications = useCallback((userId: string) => {
-    // Listen for likes on user's posts
-    const likesChannel = supabase
-      .channel('likes-notifications')
-      .on('postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'likes'
-        },
-        async (payload) => {
-          try {
-            // Get post details to check if it belongs to current user
-            const { data: post } = await supabase
-              .from('posts')
-              .select('user_id, content')
-              .eq('id', payload.new.post_id)
-              .single();
-
-            if (post && post.user_id === userId && payload.new.user_id !== userId) {
-              const { data: likerProfile } = await supabase
-                .from('profiles')
-                .select('name')
-                .eq('id', payload.new.user_id)
-                .single();
-
-              if (likerProfile) {
-                // Create notification in database
-                await createNotification(
-                  userId,
-                  'like',
-                  `${likerProfile.name} liked your post`,
-                  payload.new.post_id
-                );
-
-                // Show push notification
-                sendNotification('New Like', {
-                  body: `${likerProfile.name} liked your post`,
-                  tag: 'like',
-                });
-              }
-            }
-          } catch (error) {
-            console.error('Error sending like notification:', error);
-          }
-        }
-      )
-      .subscribe();
-
-    // Listen for comments on user's posts
-    const commentsChannel = supabase
-      .channel('comments-notifications')
-      .on('postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'comments'
-        },
-        async (payload) => {
-          try {
-            // Get post details to check if it belongs to current user
-            const { data: post } = await supabase
-              .from('posts')
-              .select('user_id, content')
-              .eq('id', payload.new.post_id)
-              .single();
-
-            if (post && post.user_id === userId && payload.new.user_id !== userId) {
-              const { data: commenterProfile } = await supabase
-                .from('profiles')
-                .select('name')
-                .eq('id', payload.new.user_id)
-                .single();
-
-              if (commenterProfile) {
-                // Create notification in database
-                await createNotification(
-                  userId,
-                  'comment',
-                  `${commenterProfile.name} commented on your post`,
-                  payload.new.post_id
-                );
-
-                // Show push notification
-                sendNotification('New Comment', {
-                  body: `${commenterProfile.name} commented on your post`,
-                  tag: 'comment',
-                });
-              }
-            }
-          } catch (error) {
-            console.error('Error sending comment notification:', error);
-          }
+        (payload) => {
+          console.log('Notification change detected:', payload);
+          fetchNotifications();
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(likesChannel);
-      supabase.removeChannel(commentsChannel);
+      supabase.removeChannel(channel);
     };
-  }, [sendNotification, createNotification]);
+  }, [currentUser, fetchNotifications]);
 
-  // Setup all notifications at once
-  const setupAllNotifications = useCallback((userId: string) => {
-    const messageChannel = setupMessageNotifications(userId);
-    const friendRequestChannel = setupFriendRequestNotifications(userId);
-    const postCleanup = setupPostNotifications(userId);
-    
-    // Return a cleanup function
-    return () => {
-      supabase.removeChannel(messageChannel);
-      supabase.removeChannel(friendRequestChannel);
-      postCleanup();
-    };
-  }, [setupMessageNotifications, setupFriendRequestNotifications, setupPostNotifications]);
+  // Initial fetch
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
 
-  return { 
-    isGranted, 
-    sendNotification, 
+  return {
+    notifications,
+    unreadCount,
+    loading,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    clearAllNotifications,
     createNotification,
-    setupMessageNotifications,
-    setupFriendRequestNotifications,
-    setupPostNotifications,
-    setupAllNotifications
+    fetchNotifications
   };
 }
