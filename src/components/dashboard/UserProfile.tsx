@@ -341,8 +341,8 @@ export default function UserProfile() {
   };
   
   const handlePostClick = (postId: string) => {
-    // Navigate to the specific post
-    navigate(`/post/${postId}`);
+    // Navigate to the dashboard instead of a specific post
+    navigate('/dashboard');
   };
 
   if (loading) {
@@ -627,14 +627,14 @@ export default function UserProfile() {
                 </Button>
               </div>
               
-              <ScrollArea className="max-h-60">
+              <ScrollArea className="h-60 pr-4">
                 {filteredActivity.length > 0 ? (
                   <div className="space-y-3">
                     {filteredActivity.map((activity, index) => (
                       <div 
                         key={index} 
                         className={`flex items-start gap-3 p-3 bg-muted/30 rounded-lg ${activity.postId ? 'cursor-pointer hover:bg-muted/50' : ''}`}
-                        onClick={activity.postId ? () => handlePostClick(activity.postId) : undefined}
+                        onClick={activity.postId ? () => handlePostClick(activity.postId!) : undefined}
                       >
                         {activity.type === 'post' && <MessageCircle className="h-4 w-4 text-social-green mt-0.5" />}
                         {activity.type === 'comment' && <MessageCircle className="h-4 w-4 text-social-blue mt-0.5" />}
@@ -664,7 +664,7 @@ export default function UserProfile() {
             <CardContent className="p-4">
               <h3 className="font-pixelated text-sm font-medium mb-3">Your Posts</h3>
               
-              <ScrollArea className="max-h-80">
+              <ScrollArea className="h-80 pr-4">
                 {userPosts.length > 0 ? (
                   <div className="space-y-3">
                     {userPosts.map((post) => (
