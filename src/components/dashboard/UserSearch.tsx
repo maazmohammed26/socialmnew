@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { UserPlus, Search, Clock, X, UserCheck, Filter, Users } from 'lucide-react';
+import { UserPlus, Search, Clock, X, UserCheck, Filter, Users, Star, Zap } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { UserProfileDialog } from '@/components/user/UserProfileDialog';
@@ -16,7 +16,15 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface User {
   id: string;
@@ -31,6 +39,8 @@ interface SearchResult extends User {
   isFriend: boolean;
   isPending: boolean;
   mutualFriends?: number;
+  isPopular?: boolean;
+  isVerified?: boolean;
 }
 
 export function UserSearch() {
@@ -40,7 +50,9 @@ export function UserSearch() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showUserDialog, setShowUserDialog] = useState(false);
-  const [searchFilter, setSearchFilter] = useState<'all' | 'new' | 'mutual'>('all');
+  const [searchFilter, setSearchFilter] = useState<'all' | 'new' | 'mutual' | 'popular'>('all');
+  const [recentSearches, setRecentSearches] = useState<SearchResult[]>([]);
+  const [showRecentSearches, setShowRecentSearches] = useState(false);
   const { toast } = useToast();
   
   // Check if we're in crimson theme
@@ -77,6 +89,16 @@ export function UserSearch() {
       }
     }
     getCurrentUser();
+    
+    // Load recent searches from localStorage
+    const savedSearches = localStorage.getItem('recentUserSearches');
+    if (savedSearches) {
+      try {
+        setRecentSearches(JSON.parse(savedSearches).slice(0, 5));
+      } catch (e) {
+        console.error('Error parsing recent searches:', e);
+      }
+    }
   }, []);
 
   const searchUsers = useCallback(async (query: string) => {
@@ -93,7 +115,7 @@ export function UserSearch() {
         .select('id, name, username, avatar, created_at')
         .or(`name.ilike.%${query}%,username.ilike.%${query}%`)
         .neq('id', currentUserId)
-        .limit(10);
+        .limit(20);
 
       if (error) throw error;
 
@@ -121,12 +143,18 @@ export function UserSearch() {
             user_uuid: currentUserId,
             friend_uuid: user.id
           });
+          
+          // Simulate popular and verified users
+          const isPopular = user.id.charAt(0) < 'c';
+          const isVerified = user.id.charAt(1) > 'f';
 
           return {
             ...user,
             isFriend: !!friendData,
             isPending: !!pendingData,
-            mutualFriends: mutualData || 0
+            mutualFriends: mutualData || 0,
+            isPopular,
+            isVerified
           };
         })
       );
@@ -137,6 +165,8 @@ export function UserSearch() {
         filteredResults = results.filter(user => !user.isFriend && !user.isPending);
       } else if (searchFilter === 'mutual') {
         filteredResults = results.filter(user => (user.mutualFriends || 0) > 0);
+      } else if (searchFilter === 'popular') {
+        filteredResults = results.filter(user => user.isPopular);
       }
 
       setSearchResults(filteredResults);
@@ -156,6 +186,9 @@ export function UserSearch() {
     const debounceTimer = setTimeout(() => {
       if (searchTerm.trim().length >= 2) {
         searchUsers(searchTerm);
+        setShowRecentSearches(false);
+      } else if (searchTerm.trim().length === 0) {
+        setShowRecentSearches(true);
       }
     }, 300);
     
@@ -210,6 +243,14 @@ export function UserSearch() {
   };
 
   const handleUserClick = (user: User) => {
+    // Add to recent searches
+    const newSearch = searchResults.find(r => r.id === user.id);
+    if (newSearch) {
+      const updatedSearches = [newSearch, ...recentSearches.filter(s => s.id !== user.id)].slice(0, 5);
+      setRecentSearches(updatedSearches);
+      localStorage.setItem('recentUserSearches', JSON.stringify(updatedSearches));
+    }
+    
     setSelectedUser(user);
     setShowUserDialog(true);
   };
@@ -217,6 +258,16 @@ export function UserSearch() {
   const handleClearSearch = () => {
     setSearchTerm('');
     setSearchResults([]);
+    setShowRecentSearches(true);
+  };
+  
+  const clearRecentSearches = () => {
+    setRecentSearches([]);
+    localStorage.removeItem('recentUserSearches');
+    toast({
+      title: 'Recent searches cleared',
+      description: 'Your search history has been cleared',
+    });
   };
 
   return (
@@ -231,6 +282,11 @@ export function UserSearch() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full font-pixelated text-xs h-8 transition-all duration-200"
+                onFocus={() => {
+                  if (searchTerm.trim().length === 0) {
+                    setShowRecentSearches(true);
+                  }
+                }}
               />
             ) : (
               <div className="relative">
@@ -241,6 +297,11 @@ export function UserSearch() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full font-pixelated text-xs h-8 pl-9 pr-9 transition-all duration-200 focus:ring-2 focus:ring-social-green"
+                  onFocus={() => {
+                    if (searchTerm.trim().length === 0) {
+                      setShowRecentSearches(true);
+                    }
+                  }}
                 />
                 {searchTerm && (
                   <Button
@@ -256,43 +317,110 @@ export function UserSearch() {
             )}
           </div>
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="outline" 
-                size="icon" 
-                className="h-8 w-8"
-              >
-                <Filter className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel className="font-pixelated text-xs">Filter Results</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={() => setSearchFilter('all')}
-                className={`font-pixelated text-xs cursor-pointer ${searchFilter === 'all' ? 'bg-muted' : ''}`}
-              >
-                <Users className="h-3 w-3 mr-2" />
-                All Users
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => setSearchFilter('new')}
-                className={`font-pixelated text-xs cursor-pointer ${searchFilter === 'new' ? 'bg-muted' : ''}`}
-              >
-                <UserPlus className="h-3 w-3 mr-2" />
-                New Connections
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => setSearchFilter('mutual')}
-                className={`font-pixelated text-xs cursor-pointer ${searchFilter === 'mutual' ? 'bg-muted' : ''}`}
-              >
-                <Users className="h-3 w-3 mr-2" />
-                With Mutual Friends
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="h-8 w-8"
+                    >
+                      <Filter className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel className="font-pixelated text-xs">Filter Results</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioGroup value={searchFilter} onValueChange={(value) => setSearchFilter(value as any)}>
+                      <DropdownMenuRadioItem value="all" className="font-pixelated text-xs cursor-pointer">
+                        <Users className="h-3 w-3 mr-2" />
+                        All Users
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="new" className="font-pixelated text-xs cursor-pointer">
+                        <UserPlus className="h-3 w-3 mr-2" />
+                        New Connections
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="mutual" className="font-pixelated text-xs cursor-pointer">
+                        <Users className="h-3 w-3 mr-2" />
+                        With Mutual Friends
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="popular" className="font-pixelated text-xs cursor-pointer">
+                        <Zap className="h-3 w-3 mr-2" />
+                        Popular Users
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-pixelated text-xs">Filter Search</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
+
+        {/* Recent Searches */}
+        {showRecentSearches && recentSearches.length > 0 && !searchTerm && (
+          <div className="space-y-2 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <h3 className="font-pixelated text-xs text-muted-foreground">Recent Searches</h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 px-2 font-pixelated text-xs"
+                onClick={clearRecentSearches}
+              >
+                Clear
+              </Button>
+            </div>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {recentSearches.map((user) => (
+                <div
+                  key={user.id}
+                  className={`flex items-center justify-between p-2 ${isCrimson ? 'bg-red-50/50' : 'bg-muted/50'} rounded-md hover:bg-muted transition-colors duration-200 hover-scale`}
+                >
+                  <div 
+                    className="flex items-center gap-2 flex-1 cursor-pointer"
+                    onClick={() => handleUserClick(user)}
+                  >
+                    <Avatar className={`w-6 h-6 ${isCrimson ? 'border border-red-200' : ''}`}>
+                      {user.avatar ? (
+                        <AvatarImage src={user.avatar} alt={user.name} />
+                      ) : (
+                        <AvatarFallback className={`${isCrimson ? 'bg-red-600' : 'bg-social-dark-green'} text-white font-pixelated text-xs`}>
+                          {user.name.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-pixelated text-xs font-medium truncate">
+                        {user.name}
+                      </p>
+                      <p className="font-pixelated text-xs text-muted-foreground truncate">
+                        @{user.username}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 hover:bg-muted/50"
+                    onClick={() => {
+                      setRecentSearches(prev => prev.filter(s => s.id !== user.id));
+                      localStorage.setItem('recentUserSearches', JSON.stringify(
+                        recentSearches.filter(s => s.id !== user.id)
+                      ));
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {searchResults.length > 0 && (
           <div className="space-y-2 max-h-60 overflow-y-auto animate-fade-in">
@@ -305,19 +433,31 @@ export function UserSearch() {
                   className="flex items-center gap-2 flex-1 cursor-pointer"
                   onClick={() => handleUserClick(user)}
                 >
-                  <Avatar className={`w-6 h-6 ${isCrimson ? 'border border-red-200' : ''}`}>
-                    {user.avatar ? (
-                      <AvatarImage src={user.avatar} alt={user.name} />
-                    ) : (
-                      <AvatarFallback className={`${isCrimson ? 'bg-red-600' : 'bg-social-dark-green'} text-white font-pixelated text-xs`}>
-                        {user.name.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
+                  <div className="relative">
+                    <Avatar className={`w-6 h-6 ${isCrimson ? 'border border-red-200' : ''}`}>
+                      {user.avatar ? (
+                        <AvatarImage src={user.avatar} alt={user.name} />
+                      ) : (
+                        <AvatarFallback className={`${isCrimson ? 'bg-red-600' : 'bg-social-dark-green'} text-white font-pixelated text-xs`}>
+                          {user.name.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    {user.isVerified && (
+                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full flex items-center justify-center border border-white">
+                        <Check className="h-2 w-2 text-white" />
+                      </div>
                     )}
-                  </Avatar>
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-pixelated text-xs font-medium truncate">
-                      {user.name}
-                    </p>
+                    <div className="flex items-center gap-1">
+                      <p className="font-pixelated text-xs font-medium truncate">
+                        {user.name}
+                      </p>
+                      {user.isPopular && (
+                        <Star className="h-2 w-2 text-yellow-500 fill-yellow-500" />
+                      )}
+                    </div>
                     <div className="flex items-center">
                       <p className="font-pixelated text-xs text-muted-foreground truncate">
                         @{user.username}
@@ -381,6 +521,9 @@ export function UserSearch() {
             <p className="font-pixelated text-xs text-muted-foreground">
               No users found
             </p>
+            <p className="font-pixelated text-xs text-muted-foreground mt-1">
+              Try a different search term or filter
+            </p>
           </div>
         )}
       </div>
@@ -391,5 +534,138 @@ export function UserSearch() {
         user={selectedUser}
       />
     </>
+  );
+}
+
+function Settings({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function Pencil({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+      <path d="m15 5 4 4" />
+    </svg>
+  );
+}
+
+function Trash({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+    </svg>
+  );
+}
+
+function Plus({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function LayoutGrid({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="7" height="7" x="3" y="3" rx="1" />
+      <rect width="7" height="7" x="14" y="3" rx="1" />
+      <rect width="7" height="7" x="14" y="14" rx="1" />
+      <rect width="7" height="7" x="3" y="14" rx="1" />
+    </svg>
+  );
+}
+
+function List({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <line x1="8" x2="21" y1="6" y2="6" />
+      <line x1="8" x2="21" y1="12" y2="12" />
+      <line x1="8" x2="21" y1="18" y2="18" />
+      <line x1="3" x2="3.01" y1="6" y2="6" />
+      <line x1="3" x2="3.01" y1="12" y2="12" />
+      <line x1="3" x2="3.01" y1="18" y2="18" />
+    </svg>
+  );
+}
+
+function Textarea({ id, value, onChange, placeholder, className }: { 
+  id?: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <textarea
+      id={id}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+    />
   );
 }
