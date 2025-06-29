@@ -115,7 +115,10 @@ export default function UserProfile() {
   const fetchUserProfile = async () => {
     try {
       const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
+      if (!authUser) {
+        setIsLoading(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from('profiles')
@@ -442,7 +445,7 @@ export default function UserProfile() {
             <CardHeader className="text-center pb-3">
               <div className="relative inline-block">
                 <Avatar 
-                  className="w-24 h-24 mx-auto mb-2 border-4 border-social-green cursor-pointer hover:scale-105 transition-transform"
+                  className="w-24 h-24 mx-auto mb-2 border-4 border-social-green/20 cursor-pointer hover:scale-105 transition-transform"
                   onClick={() => setShowAvatarViewer(true)}
                 >
                   {user?.avatar ? (
