@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,10 +23,6 @@ import {
   getOfflineMessages,
   isOnline
 } from '@/lib/offline-storage';
-import { GradientText, GlowEffect } from '@/components/ui/crimson-effects';
-import { CrimsonButton } from '@/components/ui/crimson-button';
-import { CrimsonInput } from '@/components/ui/crimson-input';
-import { CrimsonAvatar } from '@/components/ui/crimson-avatar';
 
 interface Friend {
   id: string;
@@ -76,9 +72,7 @@ export function Messages() {
   const friendsListRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { online, offlineEnabled, pendingCount, saveMessageOffline } = useOfflineMode();
-  
-  // Check if we're in crimson theme
-  const isCrimson = document.documentElement.classList.contains('crimson');
+  const [sortCounter, setSortCounter] = useState(0); // Counter to prevent unnecessary re-sorts
 
   const fetchFriends = async () => {
     try {
@@ -93,7 +87,7 @@ export function Messages() {
       if (cachedFriends && cachedFriends.length > 0) {
         console.log('Using cached friends data');
         
-        // Add a stable sortKey to each friend based on their position in the array
+        // Add sortKey to each friend for stable sorting
         const friendsWithSortKey = cachedFriends.map((friend, index) => ({
           ...friend,
           sortKey: index
@@ -108,7 +102,7 @@ export function Messages() {
         .from('profiles')
         .select('name, avatar')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (userProfile) {
         setCurrentUser({
@@ -142,7 +136,7 @@ export function Messages() {
             .from('profiles')
             .select('id, name, username, avatar')
             .eq('id', friendId)
-            .single();
+            .maybeSingle();
           
           if (friendProfile && friendProfile.id) {
             // Get last message and unread count for this friend
@@ -152,7 +146,7 @@ export function Messages() {
               .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
               .order('created_at', { ascending: false })
               .limit(1)
-              .maybeSingle(); // Changed from .single() to .maybeSingle()
+              .maybeSingle();
 
             // Get unread count (messages sent to current user that are unread)
             const { count: unreadCount } = await supabase
@@ -171,18 +165,11 @@ export function Messages() {
               lastMessageTime: lastMessage?.created_at || friend.created_at,
               lastMessageContent: lastMessage?.content || '',
               unreadCount: unreadCount || 0,
-              sortKey: formattedFriends.length // Add a stable sort key
+              sortKey: formattedFriends.length // Add sortKey for stable sorting
             });
           }
         }
       }
-
-      // Sort friends by last activity (most recent first)
-      formattedFriends.sort((a, b) => {
-        const timeA = new Date(a.lastMessageTime || 0).getTime();
-        const timeB = new Date(b.lastMessageTime || 0).getTime();
-        return timeB - timeA;
-      });
 
       // Cache the friends data
       await cacheItems(STORES.PROFILES, formattedFriends);
@@ -211,7 +198,7 @@ export function Messages() {
         .select('id')
         .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
         .eq('status', 'accepted')
-        .maybeSingle(); // Changed from .single() to .maybeSingle()
+        .maybeSingle();
 
       return !!friendship;
     } catch (error) {
@@ -505,7 +492,7 @@ export function Messages() {
             read: false
           })
           .select()
-          .single();
+          .maybeSingle();
           
         if (error) throw error;
         
@@ -531,20 +518,20 @@ export function Messages() {
       setNewMessage('');
       
       // Update friends list with new last message
-      const updatedFriends = friends.map(f => {
-        if (f.id === selectedFriend.id) {
-          return { 
-            ...f, 
-            lastMessageTime: new Date().toISOString(),
-            lastMessageContent: newMessage.trim()
-          };
-        }
-        return f;
-      });
+      const updatedFriends = friends.map(f => 
+        f.id === selectedFriend.id 
+          ? { 
+              ...f, 
+              lastMessageTime: new Date().toISOString(),
+              lastMessageContent: newMessage.trim()
+            } 
+          : f
+      );
       
-      // Maintain stable sorting by keeping the sortKey
       setFriends(updatedFriends);
-      setFilteredFriends(updatedFriends);
+      
+      // Sort friends by last message time and unread count
+      sortFriends(updatedFriends);
       
       // Only scroll to bottom when sending a new message
       setShouldScrollToBottom(true);
@@ -559,6 +546,36 @@ export function Messages() {
       setSendingMessage(false);
     }
   };
+
+  // Stable sorting function for friends
+  const sortFriends = useCallback((friendsList: Friend[]) => {
+    // Only sort if we have friends
+    if (!friendsList.length) return;
+    
+    // Increment sort counter to prevent unnecessary re-sorts
+    setSortCounter(prev => prev + 1);
+    
+    // Create a stable sort that prioritizes:
+    // 1. Unread messages first
+    // 2. Most recent messages next
+    // 3. Original order (sortKey) as a tiebreaker
+    const sorted = [...friendsList].sort((a, b) => {
+      // First priority: unread messages
+      if ((a.unreadCount || 0) > 0 && (b.unreadCount || 0) === 0) return -1;
+      if ((a.unreadCount || 0) === 0 && (b.unreadCount || 0) > 0) return 1;
+      
+      // Second priority: most recent message
+      const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
+      const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;
+      
+      if (timeA !== timeB) return timeB - timeA;
+      
+      // Third priority: original order (stable sort)
+      return (a.sortKey || 0) - (b.sortKey || 0);
+    });
+    
+    setFilteredFriends(sorted);
+  }, []);
 
   const scrollToBottom = () => {
     if (shouldScrollToBottom && messagesEndRef.current) {
@@ -598,7 +615,8 @@ export function Messages() {
     setSearchQuery(query);
     
     if (!query.trim()) {
-      setFilteredFriends(friends);
+      // If search is cleared, restore the sorted list
+      sortFriends(friends);
       return;
     }
     
@@ -648,7 +666,7 @@ export function Messages() {
                     .from('profiles')
                     .select('name, avatar')
                     .eq('id', newMessage.sender_id)
-                    .single();
+                    .maybeSingle();
                     
                   if (data) {
                     setMessages(prevMessages => {
@@ -736,6 +754,39 @@ export function Messages() {
       setTimeout(scrollToBottom, 100);
     }
   }, [messageGroups, shouldScrollToBottom]);
+  
+  // Sort friends whenever they change
+  useEffect(() => {
+    if (friends.length > 0 && !searchQuery) {
+      sortFriends(friends);
+    }
+  }, [friends, sortFriends, searchQuery]);
+
+  // Check if we're in crimson theme
+  const [isCrimson, setIsCrimson] = useState(false);
+  
+  useEffect(() => {
+    // Safely check for crimson theme
+    const checkTheme = () => {
+      if (typeof document !== 'undefined') {
+        setIsCrimson(document.documentElement.classList.contains('crimson'));
+      }
+    };
+    
+    // Check initially
+    checkTheme();
+    
+    // Set up observer to detect theme changes
+    const observer = new MutationObserver(checkTheme);
+    if (typeof document !== 'undefined') {
+      observer.observe(document.documentElement, { 
+        attributes: true, 
+        attributeFilter: ['class'] 
+      });
+    }
+    
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <DashboardLayout>
@@ -748,28 +799,21 @@ export function Messages() {
               <div className="flex flex-col gap-2">
                 <h2 className="font-pixelated text-sm font-medium">Messages</h2>
                 <div className="relative">
-                  {isCrimson ? (
-                    <CrimsonInput
-                      placeholder="Search messages..."
-                      value={searchQuery}
-                      onChange={handleSearch}
-                      className="w-full h-8 font-pixelated text-xs message-search-input"
-                    />
-                  ) : (
-                    <Input
-                      placeholder="Search messages..."
-                      value={searchQuery}
-                      onChange={handleSearch}
-                      className="w-full h-8 font-pixelated text-xs message-search-input"
-                    />
-                  )}
+                  <Input
+                    placeholder="Search messages..."
+                    value={searchQuery}
+                    onChange={handleSearch}
+                    className={`w-full h-8 font-pixelated text-xs message-search-input ${
+                      isCrimson ? 'bg-red-50/50 border-red-200 focus:border-red-400' : ''
+                    }`}
+                  />
                   {searchQuery && (
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => {
                         setSearchQuery('');
-                        setFilteredFriends(friends);
+                        sortFriends(friends);
                       }}
                       className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 hover:bg-muted/50"
                     >
@@ -782,9 +826,9 @@ export function Messages() {
 
             {/* Offline Mode Banner */}
             {!online && (
-              <div className="bg-amber-50 border-b border-amber-200 p-2">
+              <div className={`${isCrimson ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'} border-b p-2`}>
                 <div className="flex items-center gap-2">
-                  <WifiOff className="h-4 w-4 text-amber-500" />
+                  <WifiOff className={`h-4 w-4 ${isCrimson ? 'text-red-500' : 'text-amber-500'}`} />
                   <p className="font-pixelated text-xs text-amber-700">
                     {offlineEnabled 
                       ? 'Offline mode: Messages will be sent when you reconnect' 
@@ -811,105 +855,89 @@ export function Messages() {
                   </div>
                 ) : filteredFriends.length > 0 ? (
                   <div className="p-2">
-                    {/* Sort by sortKey to maintain stable order */}
-                    {filteredFriends
-                      .sort((a, b) => {
-                        // First sort by unread count (messages with unread first)
-                        if ((a.unreadCount || 0) > 0 && (b.unreadCount || 0) === 0) return -1;
-                        if ((a.unreadCount || 0) === 0 && (b.unreadCount || 0) > 0) return 1;
-                        
-                        // Then sort by last message time (most recent first)
-                        const timeA = new Date(a.lastMessageTime || 0).getTime();
-                        const timeB = new Date(b.lastMessageTime || 0).getTime();
-                        if (timeA !== timeB) return timeB - timeA;
-                        
-                        // Finally, use the stable sortKey as a tiebreaker
-                        return (a.sortKey || 0) - (b.sortKey || 0);
-                      })
-                      .map(friend => (
-                        <div
-                          key={friend.id}
-                          onClick={() => {
-                            setSelectedFriend(friend);
-                            fetchMessages(friend.id);
-                          }}
-                          className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 relative message-list-item ${
-                            selectedFriend?.id === friend.id 
-                              ? 'active' 
-                              : ''
-                          } ${friend.isBlocked ? 'opacity-50' : ''} ${
-                            friend.unreadCount && friend.unreadCount > 0 ? 'bg-social-green/5 border-l-4 border-social-green' : ''
-                          }`}
-                        >
-                          {isCrimson ? (
-                            <CrimsonAvatar
-                              src={friend.avatar}
-                              fallback={friend.name.substring(0, 2).toUpperCase()}
-                              className="h-10 w-10 border-2 border-background flex-shrink-0"
-                              glow={friend.unreadCount && friend.unreadCount > 0}
-                            />
+                    {filteredFriends.map(friend => (
+                      <div
+                        key={friend.id}
+                        onClick={() => {
+                          setSelectedFriend(friend);
+                          fetchMessages(friend.id);
+                        }}
+                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent/50 relative message-list-item ${
+                          selectedFriend?.id === friend.id 
+                            ? 'active' 
+                            : ''
+                        } ${friend.isBlocked ? 'opacity-50' : ''} ${
+                          friend.unreadCount && friend.unreadCount > 0 ? 
+                            isCrimson ? 'bg-red-50 border-l-4 border-red-500' : 'bg-social-green/5 border-l-4 border-social-green' 
+                            : ''
+                        }`}
+                      >
+                        <Avatar className={`h-10 w-10 border-2 border-background flex-shrink-0 ${
+                          isCrimson ? 'border-red-100' : ''
+                        }`}>
+                          {friend.avatar ? (
+                            <AvatarImage src={friend.avatar} />
                           ) : (
-                            <Avatar className="h-10 w-10 border-2 border-background flex-shrink-0">
-                              {friend.avatar ? (
-                                <AvatarImage src={friend.avatar} />
-                              ) : (
-                                <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                                  {friend.name.substring(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                              )}
-                            </Avatar>
+                            <AvatarFallback className={`${
+                              isCrimson ? 'bg-red-600' : 'bg-primary'
+                            } text-primary-foreground font-pixelated text-xs`}>
+                              {friend.name.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
                           )}
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <p className={`font-medium truncate text-sm font-pixelated ${
-                                friend.unreadCount && friend.unreadCount > 0 ? 'text-foreground' : 'text-foreground'
-                              }`}>
-                                {friend.name}
-                              </p>
-                              {friend.lastMessageTime && (
-                                <span className="text-xs text-muted-foreground font-pixelated">
-                                  {formatLastMessageTime(friend.lastMessageTime)}
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div className="flex items-center justify-between">
-                              <p className={`text-xs truncate font-pixelated ${
-                                friend.unreadCount && friend.unreadCount > 0 
-                                  ? 'text-foreground font-medium' 
-                                  : 'text-muted-foreground'
-                              }`}>
-                                {friend.isBlocked ? (
-                                  <span className="text-destructive">• No longer friends</span>
-                                ) : friend.lastMessageContent ? (
-                                  truncateMessage(friend.lastMessageContent)
-                                ) : (
-                                  `Start chatting with @${friend.username}`
-                                )}
-                              </p>
-                              
-                              {/* Show unread count badge or grey circle */}
-                              <div className="ml-2 flex-shrink-0">
-                                {friend.unreadCount && friend.unreadCount > 0 ? (
-                                  <Badge 
-                                    variant="default" 
-                                    className={`h-5 w-5 p-0 text-xs flex items-center justify-center ${isCrimson ? 'bg-red-600 text-white' : 'bg-social-green text-white'}`}
-                                  >
-                                    {friend.unreadCount > 9 ? '9+' : friend.unreadCount}
-                                  </Badge>
-                                ) : (
-                                  <div className="w-2 h-2 rounded-full bg-gray-300 opacity-60"></div>
-                                )}
-                              </div>
-                            </div>
+                        </Avatar>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className={`font-medium truncate text-sm font-pixelated ${
+                              friend.unreadCount && friend.unreadCount > 0 ? 'text-foreground' : 'text-foreground'
+                            }`}>
+                              {friend.name}
+                            </p>
+                            {friend.lastMessageTime && (
+                              <span className="text-xs text-muted-foreground font-pixelated">
+                                {formatLastMessageTime(friend.lastMessageTime)}
+                              </span>
+                            )}
                           </div>
                           
-                          {friend.isBlocked && (
-                            <UserX className="h-4 w-4 text-destructive flex-shrink-0" />
-                          )}
+                          <div className="flex items-center justify-between">
+                            <p className={`text-xs truncate font-pixelated ${
+                              friend.unreadCount && friend.unreadCount > 0 
+                                ? 'text-foreground font-medium' 
+                                : 'text-muted-foreground'
+                            }`}>
+                              {friend.isBlocked ? (
+                                <span className={`${isCrimson ? 'text-red-600' : 'text-destructive'}`}>• No longer friends</span>
+                              ) : friend.lastMessageContent ? (
+                                truncateMessage(friend.lastMessageContent)
+                              ) : (
+                                `Start chatting with @${friend.username}`
+                              )}
+                            </p>
+                            
+                            {/* Show unread count badge or grey circle */}
+                            <div className="ml-2 flex-shrink-0">
+                              {friend.unreadCount && friend.unreadCount > 0 ? (
+                                <Badge 
+                                  variant="default" 
+                                  className={`h-5 w-5 p-0 text-xs flex items-center justify-center ${
+                                    isCrimson ? 'bg-red-600 text-white' : 'bg-social-green text-white'
+                                  }`}
+                                >
+                                  {friend.unreadCount > 9 ? '9+' : friend.unreadCount}
+                                </Badge>
+                              ) : (
+                                <div className="w-2 h-2 rounded-full bg-gray-300 opacity-60"></div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      ))}
+                        
+                        {friend.isBlocked && (
+                          <UserX className={`h-4 w-4 ${isCrimson ? 'text-red-600' : 'text-destructive'} flex-shrink-0`} />
+                        )}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full p-6 text-center">
@@ -950,37 +978,23 @@ export function Messages() {
                   >
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
-                  {isCrimson ? (
-                    <CrimsonAvatar
-                      src={selectedFriend.avatar}
-                      fallback={selectedFriend.name.substring(0, 2).toUpperCase()}
-                      className="h-8 w-8 flex-shrink-0"
-                    />
-                  ) : (
-                    <Avatar className="h-8 w-8 flex-shrink-0">
-                      {selectedFriend.avatar ? (
-                        <AvatarImage src={selectedFriend.avatar} />
-                      ) : (
-                        <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                          {selectedFriend.name.substring(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                  )}
+                  <Avatar className={`h-8 w-8 flex-shrink-0 ${isCrimson ? 'border border-red-200' : ''}`}>
+                    {selectedFriend.avatar ? (
+                      <AvatarImage src={selectedFriend.avatar} />
+                    ) : (
+                      <AvatarFallback className={`${
+                        isCrimson ? 'bg-red-600' : 'bg-primary'
+                      } text-primary-foreground font-pixelated text-xs`}>
+                        {selectedFriend.name.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate text-sm font-pixelated">
-                      {isCrimson ? (
-                        <GradientText gradientColors={['#dc2626', '#b91c1c']}>
-                          {selectedFriend.name}
-                        </GradientText>
-                      ) : (
-                        selectedFriend.name
-                      )}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate font-pixelated">
+                    <p className="font-medium truncate text-sm font-pixelated">{selectedFriend.name}</p>
+                    <p className="font-pixelated text-xs text-muted-foreground truncate">
                       @{selectedFriend.username}
                       {selectedFriend.isBlocked && (
-                        <span className="ml-2 text-destructive font-pixelated">
+                        <span className={`ml-2 ${isCrimson ? 'text-red-600' : 'text-destructive'} font-pixelated`}>
                           • No longer friends
                         </span>
                       )}
@@ -992,7 +1006,7 @@ export function Messages() {
                     </p>
                   </div>
                   {selectedFriend.isBlocked && (
-                    <UserX className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <UserX className={`h-4 w-4 ${isCrimson ? 'text-red-600' : 'text-destructive'} flex-shrink-0`} />
                   )}
                   {!online && (
                     <WifiOff className="h-4 w-4 text-amber-500 flex-shrink-0" />
@@ -1010,9 +1024,11 @@ export function Messages() {
                       <div className="p-3 space-y-2">
                         {selectedFriend.isBlocked && (
                           <div className="text-center py-4">
-                            <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 max-w-md mx-auto">
-                              <UserX className="h-6 w-6 text-destructive mx-auto mb-2" />
-                              <p className="font-pixelated text-xs text-destructive font-medium">
+                            <div className={`${
+                              isCrimson ? 'bg-red-50 border-red-200' : 'bg-destructive/10 border-destructive/20'
+                            } border rounded-lg p-3 max-w-md mx-auto`}>
+                              <UserX className={`h-6 w-6 ${isCrimson ? 'text-red-600' : 'text-destructive'} mx-auto mb-2`} />
+                              <p className={`font-pixelated text-xs ${isCrimson ? 'text-red-600' : 'text-destructive'} font-medium`}>
                                 You are no longer friends
                               </p>
                               <p className="font-pixelated text-xs text-muted-foreground mt-1">
@@ -1024,9 +1040,11 @@ export function Messages() {
                         
                         {!online && !offlineEnabled && (
                           <div className="text-center py-4">
-                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-md mx-auto">
-                              <WifiOff className="h-6 w-6 text-amber-500 mx-auto mb-2" />
-                              <p className="font-pixelated text-xs text-amber-700 font-medium">
+                            <div className={`${
+                              isCrimson ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                            } border rounded-lg p-3 max-w-md mx-auto`}>
+                              <WifiOff className={`h-6 w-6 ${isCrimson ? 'text-red-500' : 'text-amber-500'} mx-auto mb-2`} />
+                              <p className={`font-pixelated text-xs ${isCrimson ? 'text-red-600' : 'text-amber-700'} font-medium`}>
                                 You are offline
                               </p>
                               <p className="font-pixelated text-xs text-amber-600 mt-1">
@@ -1039,7 +1057,9 @@ export function Messages() {
                         {/* Show "Start chatting" message when no messages exist */}
                         {messageGroups.length === 0 && !selectedFriend.isBlocked && (
                           <div className="text-center py-8">
-                            <div className="bg-muted/30 border border-muted rounded-lg p-6 max-w-md mx-auto">
+                            <div className={`${
+                              isCrimson ? 'bg-red-50/50 border-red-100' : 'bg-muted/30 border-muted'
+                            } border rounded-lg p-6 max-w-md mx-auto`}>
                               <Heart className={`h-8 w-8 ${isCrimson ? 'text-red-500' : 'text-social-green'} mx-auto mb-3`} />
                               <p className="font-pixelated text-sm font-medium text-foreground mb-2">
                                 Start your conversation
@@ -1055,7 +1075,9 @@ export function Messages() {
                           <div key={groupIndex} className="space-y-2">
                             {/* Date Separator */}
                             <div className="message-date-separator">
-                              <span className="font-pixelated text-xs text-muted-foreground bg-background">
+                              <span className={`font-pixelated text-xs text-muted-foreground bg-background ${
+                                isCrimson ? 'px-3 py-1 rounded-full bg-red-50/50' : ''
+                              }`}>
                                 {getDateSeparatorText(group.date)}
                               </span>
                             </div>
@@ -1067,29 +1089,36 @@ export function Messages() {
                                 className={`flex gap-2 ${message.sender_id === currentUser?.id ? 'justify-end' : 'justify-start'}`}
                               >
                                 <div className={`flex gap-2 max-w-[75%] ${message.sender_id === currentUser?.id ? 'flex-row-reverse' : ''}`}>
-                                  {isCrimson ? (
-                                    <CrimsonAvatar
-                                      src={message.sender?.avatar}
-                                      fallback={message.sender?.name.substring(0, 2).toUpperCase() || 'U'}
-                                      className="h-6 w-6 mt-1 flex-shrink-0"
-                                      size="sm"
-                                    />
-                                  ) : (
-                                    <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
-                                      {message.sender?.avatar ? (
-                                        <AvatarImage src={message.sender.avatar} />
-                                      ) : (
-                                        <AvatarFallback className="bg-primary text-primary-foreground font-pixelated text-xs">
-                                          {message.sender?.name.substring(0, 2).toUpperCase()}
-                                        </AvatarFallback>
-                                      )}
-                                    </Avatar>
-                                  )}
+                                  <Avatar className={`h-6 w-6 mt-1 flex-shrink-0 ${
+                                    isCrimson ? 'border border-red-100' : ''
+                                  }`}>
+                                    {message.sender?.avatar ? (
+                                      <AvatarImage src={message.sender.avatar} />
+                                    ) : (
+                                      <AvatarFallback className={`${
+                                        isCrimson ? 'bg-red-600' : 'bg-primary'
+                                      } text-primary-foreground font-pixelated text-xs`}>
+                                        {message.sender?.name.substring(0, 2).toUpperCase()}
+                                      </AvatarFallback>
+                                    )}
+                                  </Avatar>
                                   <div 
                                     className={`p-2 rounded-lg relative ${
                                       message.sender_id === currentUser?.id 
-                                        ? 'message-bubble-sent' 
-                                        : 'message-bubble-received'
+                                        ? isCrimson 
+                                          ? 'bg-gradient-to-r from-red-600 to-red-700 text-white' 
+                                          : 'bg-primary text-primary-foreground'
+                                        : isCrimson
+                                          ? 'bg-gray-100'
+                                          : 'bg-muted'
+                                    } ${
+                                      isCrimson 
+                                        ? message.sender_id === currentUser?.id 
+                                          ? 'rounded-tr-none' 
+                                          : 'rounded-tl-none'
+                                        : message.sender_id === currentUser?.id 
+                                          ? 'rounded-tr-none' 
+                                          : 'rounded-tl-none'
                                     }`}
                                   >
                                     <p className="text-xs whitespace-pre-wrap break-words font-pixelated">
@@ -1103,11 +1132,11 @@ export function Messages() {
                                       {message.sender_id === currentUser?.id && (
                                         <div className="ml-2">
                                           {message.status === 'pending' ? (
-                                            <Circle className="h-2 w-2 text-amber-500" />
+                                            <Circle className={`h-2 w-2 ${isCrimson ? 'text-amber-300' : 'text-amber-500'}`} />
                                           ) : message.read ? (
                                             <div className="flex">
-                                              <Circle className={`h-2 w-2 fill-current ${isCrimson ? 'text-red-400' : 'text-social-green'}`} />
-                                              <Circle className={`h-2 w-2 fill-current ${isCrimson ? 'text-red-400' : 'text-social-green'} -ml-1`} />
+                                              <Circle className={`h-2 w-2 fill-current ${isCrimson ? 'text-green-300' : 'text-social-green'}`} />
+                                              <Circle className={`h-2 w-2 fill-current ${isCrimson ? 'text-green-300' : 'text-social-green'} -ml-1`} />
                                             </div>
                                           ) : (
                                             <Circle className="h-2 w-2 fill-muted-foreground text-muted-foreground" />
@@ -1147,33 +1176,27 @@ export function Messages() {
                                 sendMessage();
                               }
                             }}
-                            className="min-h-[52px] max-h-[120px] resize-none flex-1 font-pixelated text-xs"
+                            className={`min-h-[52px] max-h-[120px] resize-none flex-1 font-pixelated text-xs ${
+                              isCrimson ? 'border-red-200 focus:border-red-400' : ''
+                            }`}
                             disabled={sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
                           />
-                          {isCrimson ? (
-                            <CrimsonButton
-                              onClick={sendMessage}
-                              disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
-                              className="flex-shrink-0 h-[52px] w-12"
-                              gradient
-                              glow
-                            >
-                              <Send className="h-4 w-4" />
-                            </CrimsonButton>
-                          ) : (
-                            <Button
-                              onClick={sendMessage}
-                              disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
-                              className="bg-primary hover:bg-primary/90 flex-shrink-0 h-[52px] w-12"
-                            >
-                              <Send className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button
+                            onClick={sendMessage}
+                            disabled={!newMessage.trim() || sendingMessage || selectedFriend.isBlocked || (!online && !offlineEnabled)}
+                            className={`${
+                              isCrimson 
+                                ? 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600' 
+                                : 'bg-primary hover:bg-primary/90'
+                            } flex-shrink-0 h-[52px] w-12`}
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
                         </div>
                         <p className="text-xs text-muted-foreground font-pixelated">
                           Press Enter to send, Shift + Enter for new line
                           {!online && offlineEnabled && (
-                            <span className="ml-2 text-amber-500">• Offline mode enabled</span>
+                            <span className={`ml-2 ${isCrimson ? 'text-red-500' : 'text-amber-500'}`}>• Offline mode enabled</span>
                           )}
                         </p>
                       </div>
@@ -1183,23 +1206,17 @@ export function Messages() {
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <MessageSquare className={`h-16 w-16 ${isCrimson ? 'text-red-400' : 'text-muted-foreground'} mb-4`} />
-                <h2 className="text-lg font-semibold mb-2 font-pixelated">
-                  {isCrimson ? (
-                    <GradientText gradientColors={['#dc2626', '#b91c1c']}>
-                      Your Messages
-                    </GradientText>
-                  ) : (
-                    "Your Messages"
-                  )}
-                </h2>
+                <MessageSquare className={`h-16 w-16 ${isCrimson ? 'text-red-300' : 'text-muted-foreground'} mb-4`} />
+                <h2 className="text-lg font-semibold mb-2 font-pixelated">Your Messages</h2>
                 <p className="text-muted-foreground font-pixelated text-sm">
                   Select a conversation to start messaging
                 </p>
                 {!online && (
-                  <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 max-w-md">
+                  <div className={`mt-4 ${
+                    isCrimson ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                  } border rounded-lg p-3 max-w-md`}>
                     <div className="flex items-center gap-2">
-                      <WifiOff className="h-4 w-4 text-amber-500" />
+                      <WifiOff className={`h-4 w-4 ${isCrimson ? 'text-red-500' : 'text-amber-500'}`} />
                       <p className="font-pixelated text-xs text-amber-700">
                         {offlineEnabled 
                           ? 'Offline mode is enabled. Your messages will be saved locally.' 

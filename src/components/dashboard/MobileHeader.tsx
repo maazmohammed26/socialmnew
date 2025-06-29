@@ -17,10 +17,6 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useEnhancedNotifications } from '@/hooks/use-enhanced-notifications';
-import { GradientText, GlowEffect } from '@/components/ui/crimson-effects';
-import { CrimsonButton } from '@/components/ui/crimson-button';
-import { CrimsonAvatar } from '@/components/ui/crimson-avatar';
-import { CrimsonBadge, CrimsonNotificationBadge } from '@/components/ui/crimson-badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +51,32 @@ export function MobileHeader() {
   const { toast } = useToast();
   const { unreadCount: notificationCount } = useEnhancedNotifications();
   
+  // Check if we're in crimson theme
+  const [isCrimson, setIsCrimson] = useState(false);
+  
+  useEffect(() => {
+    // Safely check for crimson theme
+    const checkTheme = () => {
+      if (typeof document !== 'undefined') {
+        setIsCrimson(document.documentElement.classList.contains('crimson'));
+      }
+    };
+    
+    // Check initially
+    checkTheme();
+    
+    // Set up observer to detect theme changes
+    const observer = new MutationObserver(checkTheme);
+    if (typeof document !== 'undefined') {
+      observer.observe(document.documentElement, { 
+        attributes: true, 
+        attributeFilter: ['class'] 
+      });
+    }
+    
+    return () => observer.disconnect();
+  }, []);
+  
   useEffect(() => {
     setUnreadCount(notificationCount);
   }, [notificationCount]);
@@ -69,7 +91,7 @@ export function MobileHeader() {
           .from('profiles')
           .select('name, username, avatar')
           .eq('id', authUser.id)
-          .single();
+          .maybeSingle();
           
         if (data) {
           setUser({
@@ -169,9 +191,6 @@ export function MobileHeader() {
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Check if we're in crimson theme
-  const isCrimson = document.documentElement.classList.contains('crimson');
-
   return (
     <>
       <header className="fixed top-0 left-0 w-full z-50 bg-background/95 backdrop-blur-sm border-b border-border">
@@ -191,7 +210,7 @@ export function MobileHeader() {
                     alt="SocialChat" 
                     className="h-8 w-auto mr-2"
                   />
-                  <h2 className="text-2xl font-bold font-pixelated text-white">
+                  <h2 className="font-pixelated text-lg text-white">
                     Menu
                   </h2>
                 </div>
@@ -199,23 +218,15 @@ export function MobileHeader() {
                 {/* User info section */}
                 <div className="p-4 border-b shrink-0">
                   <div className="flex items-center gap-3 mb-4">
-                    {isCrimson ? (
-                      <CrimsonAvatar
-                        src={user?.avatar}
-                        fallback={user?.name ? user.name.substring(0, 2).toUpperCase() : 'GU'}
-                        className="h-10 w-10"
-                      />
-                    ) : (
-                      <Avatar className="h-10 w-10">
-                        {user?.avatar ? (
-                          <AvatarImage src={user.avatar} alt={user?.name} />
-                        ) : (
-                          <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-sm">
-                            {user?.name ? user.name.substring(0, 2).toUpperCase() : 'GU'}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
-                    )}
+                    <Avatar className="h-10 w-10">
+                      {user?.avatar ? (
+                        <AvatarImage src={user.avatar} alt={user?.name} />
+                      ) : (
+                        <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-sm">
+                          {user?.name ? user.name.substring(0, 2).toUpperCase() : 'GU'}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
                     <div className="flex-1">
                       <h3 className="font-pixelated text-sm">{user?.name || 'Guest'}</h3>
                       <p className="text-xs text-muted-foreground font-pixelated">@{user?.username || 'guest'}</p>
@@ -259,31 +270,17 @@ export function MobileHeader() {
 
                 {/* Footer with logout */}
                 <div className="p-4 border-t mt-auto shrink-0">
-                  {isCrimson ? (
-                    <CrimsonButton 
-                      variant="ghost" 
-                      className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 font-pixelated hover-scale"
-                      onClick={() => {
-                        setOpen(false);
-                        setShowLogoutConfirm(true);
-                      }}
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      <span>Sign Out</span>
-                    </CrimsonButton>
-                  ) : (
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 font-pixelated hover-scale"
-                      onClick={() => {
-                        setOpen(false);
-                        setShowLogoutConfirm(true);
-                      }}
-                    >
-                      <LogOut className="h-4 w-4 mr-2" />
-                      <span>Sign Out</span>
-                    </Button>
-                  )}
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10 font-pixelated hover-scale"
+                    onClick={() => {
+                      setOpen(false);
+                      setShowLogoutConfirm(true);
+                    }}
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    <span>Sign Out</span>
+                  </Button>
                 </div>
               </SheetContent>
             </Sheet>
@@ -294,60 +291,40 @@ export function MobileHeader() {
             >
               <img 
                 src="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" 
-                alt="SocialChat Logo" 
+                alt="SocialChat" 
                 className="h-8 w-auto"
               />
-              {isCrimson ? (
-                <GradientText 
-                  gradientColors={['#dc2626', '#b91c1c']} 
-                  className="font-pixelated text-base"
-                  animated
-                >
-                  SocialChat
-                </GradientText>
-              ) : (
-                <h1 className="font-pixelated text-base">
+              <h1 className="font-pixelated text-base">
+                {isCrimson ? (
+                  <span className="bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent">SocialChat</span>
+                ) : (
                   <span className="social-gradient bg-clip-text text-transparent">SocialChat</span>
-                </h1>
-              )}
+                )}
+              </h1>
             </div>
           </div>
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="p-0 h-8 w-8 rounded-full hover-scale relative">
-                {isCrimson ? (
-                  <CrimsonAvatar
-                    src={user?.avatar}
-                    fallback={user?.name ? user.name.substring(0, 2).toUpperCase() : 'GU'}
-                    className="h-8 w-8"
-                    size="sm"
-                  />
-                ) : (
-                  <Avatar className="h-8 w-8">
-                    {user?.avatar ? (
-                      <AvatarImage src={user.avatar} alt={user?.name} />
-                    ) : (
-                      <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-xs">
-                        {user?.name ? user.name.substring(0, 2).toUpperCase() : 'GU'}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                )}
-                {unreadCount > 0 && (
-                  isCrimson ? (
-                    <CrimsonNotificationBadge 
-                      count={unreadCount}
-                      className="absolute -top-1 -right-1 h-4 w-4 p-0 text-xs flex items-center justify-center"
-                    />
+                <Avatar className="h-8 w-8">
+                  {user?.avatar ? (
+                    <AvatarImage src={user.avatar} alt={user?.name} />
                   ) : (
-                    <Badge 
-                      variant="destructive" 
-                      className="absolute -top-1 -right-1 h-4 w-4 p-0 text-xs flex items-center justify-center animate-pulse"
-                    >
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </Badge>
+                    <AvatarFallback className={`${isCrimson ? 'bg-red-600' : 'bg-social-dark-green'} text-white font-pixelated text-xs`}>
+                      {user?.name ? user.name.substring(0, 2).toUpperCase() : 'GU'}
+                    </AvatarFallback>
                   )}
+                </Avatar>
+                {unreadCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className={`absolute -top-1 -right-1 h-4 w-4 p-0 text-xs flex items-center justify-center animate-pulse ${
+                      isCrimson ? 'bg-red-600' : ''
+                    }`}
+                  >
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Badge>
                 )}
               </Button>
             </DropdownMenuTrigger>
@@ -366,15 +343,9 @@ export function MobileHeader() {
                     <Bell className="mr-2 h-4 w-4" />
                     Notifications
                     {unreadCount > 0 && (
-                      isCrimson ? (
-                        <CrimsonBadge variant="destructive" className="ml-auto h-4 px-2 text-xs">
-                          {unreadCount}
-                        </CrimsonBadge>
-                      ) : (
-                        <Badge variant="destructive" className="ml-auto h-4 px-2 text-xs">
-                          {unreadCount}
-                        </Badge>
-                      )}
+                      <Badge variant="destructive" className="ml-auto h-4 px-2 text-xs">
+                        {unreadCount}
+                      </Badge>
                     )}
                   </div>
                 </DropdownMenuItem>
@@ -422,7 +393,9 @@ export function MobileHeader() {
             <AlertDialogCancel className="font-pixelated">Cancel</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleLogout}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated"
+              className={`bg-destructive text-destructive-foreground hover:bg-destructive/90 font-pixelated ${
+                isCrimson ? 'bg-red-600 hover:bg-red-700' : ''
+              }`}
             >
               Sign Out
             </AlertDialogAction>

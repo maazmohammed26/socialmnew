@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { GradientText } from '@/components/ui/crimson-effects';
 
 interface LoadingScreenProps {
   className?: string;
@@ -8,7 +7,30 @@ interface LoadingScreenProps {
 
 export function LoadingScreen({ className }: LoadingScreenProps) {
   // Check if we're in crimson theme
-  const isCrimson = document.documentElement.classList.contains('crimson');
+  const [isCrimson, setIsCrimson] = useState(false);
+  
+  useEffect(() => {
+    // Safely check for crimson theme
+    const checkTheme = () => {
+      if (typeof document !== 'undefined') {
+        setIsCrimson(document.documentElement.classList.contains('crimson'));
+      }
+    };
+    
+    // Check initially
+    checkTheme();
+    
+    // Set up observer to detect theme changes
+    const observer = new MutationObserver(checkTheme);
+    if (typeof document !== 'undefined') {
+      observer.observe(document.documentElement, { 
+        attributes: true, 
+        attributeFilter: ['class'] 
+      });
+    }
+    
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div className={cn(
@@ -26,19 +48,14 @@ export function LoadingScreen({ className }: LoadingScreenProps) {
           )}
         />
         <div className="space-y-2">
-          {isCrimson ? (
-            <GradientText 
-              gradientColors={['#dc2626', '#b91c1c']} 
-              className="text-2xl font-bold font-pixelated"
-              animated
-            >
-              SocialChat
-            </GradientText>
-          ) : (
-            <h1 className="text-2xl font-bold font-pixelated social-gradient bg-clip-text text-transparent">
-              SocialChat
-            </h1>
-          )}
+          <h1 className={cn(
+            "text-2xl font-bold font-pixelated",
+            isCrimson 
+              ? "bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent" 
+              : "social-gradient bg-clip-text text-transparent"
+          )}>
+            SocialChat
+          </h1>
           <div className="flex items-center justify-center gap-1">
             <div className={cn(
               "h-2 w-2 rounded-full animate-pulse delay-0",
