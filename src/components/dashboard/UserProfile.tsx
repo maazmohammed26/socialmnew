@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink, MapPin } from 'lucide-react';
+import { Camera, Edit, Save, X, Heart, Trash2, Palette, Eye, Users, MessageCircle, Bell, Shield, Calendar, Link, ExternalLink, MapPin, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
