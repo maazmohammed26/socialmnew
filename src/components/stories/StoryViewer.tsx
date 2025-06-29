@@ -1,11 +1,12 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { X, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { X, Eye, ChevronLeft, ChevronRight, Save, Download } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { getCachedImage, cacheImage } from '@/lib/cache-utils';
 
 interface Story {
   id: string;
@@ -35,6 +36,8 @@ export function StoryViewer({ story, onClose, currentUserId, onStoryUpdated }: S
   const [timeLeft, setTimeLeft] = useState(12);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const longPressRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
@@ -47,6 +50,73 @@ export function StoryViewer({ story, onClose, currentUserId, onStoryUpdated }: S
 
   const totalPhotos = photos.length;
   const isOwnStory = story.user_id === currentUserId;
+
+  // Load image with caching
+  useEffect(() => {
+    if (!photos[currentPhotoIndex]) return;
+    
+    const loadImage = async () => {
+      setLoading(true);
+      try {
+        // Try to get from cache first
+        const cachedImage = await getCachedImage(photos[currentPhotoIndex]);
+        
+        if (cachedImage) {
+          // Create object URL from cached blob
+          setImageSrc(URL.createObjectURL(cachedImage));
+          setLoading(false);
+          return;
+        }
+        
+        // If not in cache, fetch and cache
+        const response = await fetch(photos[currentPhotoIndex]);
+        const blob = await response.blob();
+        await cacheImage(photos[currentPhotoIndex], blob);
+        
+        setImageSrc(URL.createObjectURL(blob));
+      } catch (error) {
+        console.error('Error loading story image:', error);
+        // Use original source as fallback
+        setImageSrc(photos[currentPhotoIndex]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadImage();
+    
+    // Clean up object URL on unmount or when changing photos
+    return () => {
+      if (imageSrc && imageSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(imageSrc);
+      }
+    };
+  }, [currentPhotoIndex, photos]);
+
+  // Preload next image
+  useEffect(() => {
+    if (currentPhotoIndex < totalPhotos - 1) {
+      const nextImageUrl = photos[currentPhotoIndex + 1];
+      if (nextImageUrl) {
+        const preloadImage = async () => {
+          try {
+            // Check if already cached
+            const cachedImage = await getCachedImage(nextImageUrl);
+            if (!cachedImage) {
+              // If not cached, fetch and cache
+              const response = await fetch(nextImageUrl);
+              const blob = await response.blob();
+              await cacheImage(nextImageUrl, blob);
+            }
+          } catch (error) {
+            console.error('Error preloading next image:', error);
+          }
+        };
+        
+        preloadImage();
+      }
+    }
+  }, [currentPhotoIndex, photos, totalPhotos]);
 
   useEffect(() => {
     if (!isPaused) {
@@ -85,16 +155,7 @@ export function StoryViewer({ story, onClose, currentUserId, onStoryUpdated }: S
   }, [isPaused, onClose, currentPhotoIndex, totalPhotos]);
 
   const timeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
-    if (diffInMinutes < 60) {
-      return `${diffInMinutes}m ago`;
-    } else {
-      const diffInHours = Math.floor(diffInMinutes / 60);
-      return `${diffInHours}h ago`;
-    }
+    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
   };
 
   const goToPreviousPhoto = () => {
@@ -126,6 +187,31 @@ export function StoryViewer({ story, onClose, currentUserId, onStoryUpdated }: S
       clearTimeout(longPressRef.current);
     }
     setIsPaused(false);
+  };
+
+  const handleDownload = async () => {
+    try {
+      if (!imageSrc) return;
+      
+      const link = document.createElement('a');
+      link.href = imageSrc;
+      link.download = `story-${currentPhotoIndex + 1}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: 'Image saved',
+        description: 'The image has been saved to your device',
+      });
+    } catch (error) {
+      console.error('Error downloading image:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to save image'
+      });
+    }
   };
 
   if (photos.length === 0) {
@@ -172,14 +258,26 @@ export function StoryViewer({ story, onClose, currentUserId, onStoryUpdated }: S
                 </p>
               </div>
             </div>
-            <Button
-              onClick={onClose}
-              size="icon"
-              variant="ghost"
-              className="text-white hover:bg-white/20 h-6 w-6"
-            >
-              <X className="h-3 w-3" />
-            </Button>
+            <div className="flex gap-2">
+              {isOwnStory && (
+                <Button
+                  onClick={handleDownload}
+                  size="icon"
+                  variant="ghost"
+                  className="text-white hover:bg-white/20 h-6 w-6"
+                >
+                  <Download className="h-3 w-3" />
+                </Button>
+              )}
+              <Button
+                onClick={onClose}
+                size="icon"
+                variant="ghost"
+                className="text-white hover:bg-white/20 h-6 w-6"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
 
           {/* Navigation Areas */}
@@ -204,11 +302,23 @@ export function StoryViewer({ story, onClose, currentUserId, onStoryUpdated }: S
             onTouchStart={handleLongPressStart}
             onTouchEnd={handleLongPressEnd}
           >
-            <img
-              src={photos[currentPhotoIndex]}
-              alt="Story"
-              className="max-w-full max-h-full object-contain"
-            />
+            {loading ? (
+              <div className="flex flex-col items-center justify-center">
+                <div className="w-10 h-10 border-4 border-t-white border-white/30 rounded-full animate-spin"></div>
+                <p className="text-white mt-4 font-pixelated text-xs">Loading...</p>
+              </div>
+            ) : imageSrc ? (
+              <img
+                src={imageSrc}
+                alt="Story"
+                className="max-w-full max-h-full object-contain"
+              />
+            ) : (
+              <div className="flex items-center justify-center">
+                <p className="text-white font-pixelated text-xs">Image not available</p>
+              </div>
+            )}
+            
             {isPaused && (
               <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                 <div className="text-white font-pixelated text-sm bg-black/50 px-3 py-1 rounded-full">
