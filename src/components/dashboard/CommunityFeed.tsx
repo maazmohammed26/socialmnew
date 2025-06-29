@@ -90,17 +90,6 @@ export function CommunityFeed() {
 
   const isHomePage = location.pathname === '/dashboard';
 
-  // Function to generate thumbnail URL from original image URL
-  const getThumbnailUrl = (originalUrl: string): string => {
-    // Check if URL is from Supabase storage
-    if (originalUrl.includes('supabase.co') && originalUrl.includes('storage/v1/object/public')) {
-      // Add a size parameter for thumbnail
-      return `${originalUrl}?width=600&quality=75`;
-    }
-    // For other URLs, return as is
-    return originalUrl;
-  };
-
   const toggleComments = (postId: string) => {
     setExpandedComments(prev => ({
       ...prev,
@@ -223,11 +212,6 @@ export function CommunityFeed() {
         };
       });
 
-      // Cache the results
-      const cacheKey = `feed_cache_${currentUser?.id || 'guest'}_20_0`;
-      localStorage.setItem(cacheKey, JSON.stringify(formattedPosts));
-      localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
-
       setPosts(formattedPosts);
     } catch (error) {
       console.error('Error fetching likes and comments:', error);
@@ -245,28 +229,6 @@ export function CommunityFeed() {
   const fetchPosts = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // Try to get from cache first
-      const cacheKey = `feed_cache_${currentUser?.id || 'guest'}_20_0`;
-      const cachedData = localStorage.getItem(cacheKey);
-      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
-      
-      // Use cache if it's less than 5 minutes old
-      if (cachedData && cacheTime) {
-        const now = Date.now();
-        const cacheAge = now - parseInt(cacheTime);
-        if (cacheAge < 5 * 60 * 1000) { // 5 minutes
-          console.log('Using cached feed data');
-          setPosts(JSON.parse(cachedData));
-          setLoading(false);
-          
-          // Still fetch in background to update cache
-          fetchPostsInBackground();
-          return;
-        }
-      }
-      
-      // If no valid cache, fetch from database
       await fetchPostsInBackground();
     } catch (error) {
       console.error('Error fetching posts:', error);
@@ -278,7 +240,7 @@ export function CommunityFeed() {
     } finally {
       setLoading(false);
     }
-  }, [fetchPostsInBackground, toast, currentUser]);
+  }, [fetchPostsInBackground, toast]);
 
   const getCurrentUser = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -770,11 +732,10 @@ export function CommunityFeed() {
                     {post.image_url && (
                       <div className="mb-4">
                         <img
-                          src={getThumbnailUrl(post.image_url)}
+                          src={post.image_url}
                           alt="Post image"
                           className="w-full max-h-96 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                           onClick={() => setSelectedImage(post.image_url)}
-                          loading="lazy"
                         />
                       </div>
                     )}

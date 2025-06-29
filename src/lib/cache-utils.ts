@@ -11,8 +11,7 @@ export const STORES = {
   MESSAGES: 'messages',
   GROUPS: 'groups',
   STORIES: 'stories',
-  NOTIFICATIONS: 'notifications',
-  IMAGES: 'images' // New store for image caching
+  NOTIFICATIONS: 'notifications'
 };
 
 // Cache expiration times (in milliseconds)
@@ -22,8 +21,7 @@ export const CACHE_EXPIRATION = {
   MESSAGES: 1 * 60 * 1000, // 1 minute
   GROUPS: 5 * 60 * 1000, // 5 minutes
   STORIES: 2 * 60 * 1000, // 2 minutes
-  NOTIFICATIONS: 1 * 60 * 1000, // 1 minute
-  IMAGES: 24 * 60 * 60 * 1000 // 24 hours for images
+  NOTIFICATIONS: 1 * 60 * 1000 // 1 minute
 };
 
 // Initialize IndexedDB
@@ -50,10 +48,6 @@ export const initDB = async (): Promise<IDBPDatabase> => {
       if (!db.objectStoreNames.contains(STORES.NOTIFICATIONS)) {
         const notificationsStore = db.createObjectStore(STORES.NOTIFICATIONS, { keyPath: 'id' });
         notificationsStore.createIndex('user_id', 'user_id', { unique: false });
-      }
-      if (!db.objectStoreNames.contains(STORES.IMAGES)) {
-        const imagesStore = db.createObjectStore(STORES.IMAGES, { keyPath: 'url' });
-        imagesStore.createIndex('timestamp', '_timestamp', { unique: false });
       }
     },
   });
@@ -219,94 +213,11 @@ export const clearExpiredItems = async (): Promise<void> => {
       
       // Delete expired items
       const expiredItems = items.filter(item => now - item._timestamp > expirationTime);
-      await Promise.all(expiredItems.map(item => store.delete(item.id || item.url)));
+      await Promise.all(expiredItems.map(item => store.delete(item.id)));
       
       await tx.done;
     }
   } catch (error) {
     console.error('Error clearing expired items:', error);
-  }
-};
-
-// Cache an image
-export const cacheImage = async (url: string, blob: Blob): Promise<void> => {
-  try {
-    const db = await initDB();
-    const tx = db.transaction(STORES.IMAGES, 'readwrite');
-    const store = tx.objectStore(STORES.IMAGES);
-    
-    await store.put({
-      url,
-      blob,
-      _timestamp: Date.now()
-    });
-    
-    await tx.done;
-  } catch (error) {
-    console.error('Error caching image:', error);
-  }
-};
-
-// Get a cached image
-export const getCachedImage = async (url: string): Promise<Blob | null> => {
-  try {
-    const db = await initDB();
-    const item = await db.get(STORES.IMAGES, url);
-    
-    if (!item) return null;
-    
-    // Check if item is expired
-    if (Date.now() - item._timestamp > CACHE_EXPIRATION.IMAGES) {
-      // Item is expired, delete it
-      await db.delete(STORES.IMAGES, url);
-      return null;
-    }
-    
-    return item.blob;
-  } catch (error) {
-    console.error('Error getting cached image:', error);
-    return null;
-  }
-};
-
-// Preload and cache an image
-export const preloadAndCacheImage = async (url: string): Promise<void> => {
-  try {
-    // Check if already cached
-    const cachedImage = await getCachedImage(url);
-    if (cachedImage) return;
-    
-    // Fetch the image
-    const response = await fetch(url);
-    const blob = await response.blob();
-    
-    // Cache the image
-    await cacheImage(url, blob);
-  } catch (error) {
-    console.error('Error preloading and caching image:', error);
-  }
-};
-
-// Get image from cache or network with fallback
-export const getImageWithCache = async (url: string): Promise<string> => {
-  try {
-    // Try to get from cache first
-    const cachedImage = await getCachedImage(url);
-    
-    if (cachedImage) {
-      // Create object URL from cached blob
-      return URL.createObjectURL(cachedImage);
-    }
-    
-    // If not in cache, fetch and cache
-    const response = await fetch(url);
-    const blob = await response.blob();
-    await cacheImage(url, blob);
-    
-    return URL.createObjectURL(blob);
-  } catch (error) {
-    console.error('Error getting image with cache:', error);
-    // Return original URL as fallback
-    return url;
   }
 };

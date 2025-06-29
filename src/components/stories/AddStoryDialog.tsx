@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -40,58 +41,6 @@ export function AddStoryDialog({ open, onOpenChange, onStoryAdded, currentUser, 
   const hasExistingPhotos = existingStory?.photo_urls?.length > 0;
   const existingPhotosCount = hasExistingPhotos ? existingStory.photo_urls.length : 0;
   const totalPhotosAfterUpload = existingPhotosCount + selectedImages.length;
-
-  // Compress image before upload
-  const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promise<File> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          // Calculate new dimensions if needed
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          
-          // Convert to blob
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                reject(new Error('Canvas to Blob conversion failed'));
-                return;
-              }
-              // Create a new file from the blob
-              const compressedFile = new File([blob], file.name, {
-                type: 'image/jpeg',
-                lastModified: Date.now(),
-              });
-              resolve(compressedFile);
-            },
-            'image/jpeg',
-            quality
-          );
-        };
-        img.onerror = () => {
-          reject(new Error('Image loading error'));
-        };
-      };
-      reader.onerror = () => {
-        reject(new Error('FileReader error'));
-      };
-    });
-  };
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -187,16 +136,12 @@ export function AddStoryDialog({ open, onOpenChange, onStoryAdded, currentUser, 
 
       // Upload all images
       for (const image of selectedImages) {
-        // Compress the image before uploading
-        const compressedImage = await compressImage(image);
-        console.log(`Original size: ${image.size / 1024}KB, Compressed size: ${compressedImage.size / 1024}KB`);
-        
         const fileExt = image.name.split('.').pop();
         const fileName = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
         
         const { error: uploadError } = await supabase.storage
           .from('stories')
-          .upload(fileName, compressedImage);
+          .upload(fileName, image);
 
         if (uploadError) throw uploadError;
 
@@ -352,7 +297,6 @@ export function AddStoryDialog({ open, onOpenChange, onStoryAdded, currentUser, 
                         src={url}
                         alt={`Story photo ${index + 1}`}
                         className="w-full h-20 object-cover rounded-md transition-transform group-hover:scale-105"
-                        loading="lazy"
                       />
                       <Button
                         onClick={() => setShowDeleteConfirmation({ 
@@ -388,7 +332,6 @@ export function AddStoryDialog({ open, onOpenChange, onStoryAdded, currentUser, 
                         src={url}
                         alt={`Existing ${index + 1}`}
                         className="w-full h-16 object-cover rounded transition-transform hover:scale-105"
-                        loading="lazy"
                       />
                       {existingPhotosCount > 6 && index === 5 && (
                         <div className="absolute inset-0 bg-black/50 rounded flex items-center justify-center">

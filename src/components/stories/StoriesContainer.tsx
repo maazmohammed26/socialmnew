@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,6 @@ import { useToast } from '@/hooks/use-toast';
 import { StoryViewer } from './StoryViewer';
 import { AddStoryDialog } from './AddStoryDialog';
 import { ProfilePictureViewer } from './ProfilePictureViewer';
-import { getCachedImage, cacheImage } from '@/lib/cache-utils';
 
 interface Story {
   id: string;
@@ -25,17 +24,6 @@ interface Story {
     avatar: string | null;
   };
 }
-
-// Function to generate thumbnail URL
-const getThumbnailUrl = (originalUrl: string): string => {
-  // Check if URL is from Supabase storage
-  if (originalUrl.includes('supabase.co') && originalUrl.includes('storage/v1/object/public')) {
-    // Add a size parameter for thumbnail
-    return `${originalUrl}?width=150&quality=60`;
-  }
-  // For other URLs, return as is
-  return originalUrl;
-};
 
 const StoriesContainer = React.memo(() => {
   const [stories, setStories] = useState<Story[]>([]);
@@ -130,39 +118,6 @@ const StoriesContainer = React.memo(() => {
     }
   }, []);
 
-  // Preload story images
-  const preloadStoryImages = useCallback(async (stories: Story[]) => {
-    try {
-      // Only preload first image of each story to save bandwidth
-      const imageUrls = stories.map(story => {
-        if (story.photo_urls && story.photo_urls.length > 0) {
-          return getThumbnailUrl(story.photo_urls[0]);
-        } else if (story.image_url) {
-          return getThumbnailUrl(story.image_url);
-        }
-        return null;
-      }).filter(Boolean) as string[];
-      
-      // Preload images in background
-      imageUrls.forEach(async (url) => {
-        try {
-          // Check if already cached
-          const cachedImage = await getCachedImage(url);
-          if (!cachedImage) {
-            // Fetch and cache thumbnail
-            const response = await fetch(url);
-            const blob = await response.blob();
-            await cacheImage(url, blob);
-          }
-        } catch (err) {
-          console.error('Error preloading image:', err);
-        }
-      });
-    } catch (error) {
-      console.error('Error preloading story images:', error);
-    }
-  }, []);
-
   const fetchStories = useCallback(async () => {
     try {
       // First cleanup expired photos
@@ -211,20 +166,17 @@ const StoriesContainer = React.memo(() => {
       });
 
       setStories(sortedStories);
-      
-      // Preload story images in background
-      preloadStoryImages(sortedStories);
     } catch (error) {
       console.error('Error fetching stories:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to load stories'
+        description: 'Failed to load stories',
       });
     } finally {
       setLoading(false);
     }
-  }, [toast, viewedStories, preloadStoryImages]);
+  }, [toast, viewedStories]);
 
   const getCurrentUser = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -407,7 +359,7 @@ const StoriesContainer = React.memo(() => {
       <div className="flex gap-2 p-3 overflow-x-auto">
         {[...Array(5)].map((_, i) => (
           <div key={i} className="flex flex-col items-center gap-1 min-w-[60px]">
-            <div className="h-12 w-12 rounded-full bg-muted animate-pulse" />
+            <div className="w-12 h-12 rounded-full bg-muted animate-pulse" />
             <div className="w-8 h-2 bg-muted rounded animate-pulse" />
           </div>
         ))}
@@ -488,11 +440,7 @@ const StoriesContainer = React.memo(() => {
                     : 'border-social-green hover:border-social-light-green story-unseen-border'
                 }`}>
                   {story.profiles.avatar ? (
-                    <AvatarImage 
-                      src={getThumbnailUrl(story.profiles.avatar)} 
-                      alt={story.profiles.name}
-                      loading="lazy"
-                    />
+                    <AvatarImage src={story.profiles.avatar} alt={story.profiles.name} />
                   ) : (
                     <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-xs">
                       {story.profiles.name.substring(0, 2).toUpperCase()}

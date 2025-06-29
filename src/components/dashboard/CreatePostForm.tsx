@@ -33,71 +33,15 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
     }
   };
 
-  // Compress image before upload
-  const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promise<File> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          // Calculate new dimensions if needed
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          
-          // Convert to blob
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                reject(new Error('Canvas to Blob conversion failed'));
-                return;
-              }
-              // Create a new file from the blob
-              const compressedFile = new File([blob], file.name, {
-                type: 'image/jpeg',
-                lastModified: Date.now(),
-              });
-              resolve(compressedFile);
-            },
-            'image/jpeg',
-            quality
-          );
-        };
-        img.onerror = () => {
-          reject(new Error('Image loading error'));
-        };
-      };
-      reader.onerror = () => {
-        reject(new Error('FileReader error'));
-      };
-    });
-  };
-
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
-      // Compress the image before uploading
-      const compressedFile = await compressImage(file);
-      console.log(`Original size: ${file.size / 1024}KB, Compressed size: ${compressedFile.size / 1024}KB`);
-      
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `post-images/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('post-images')
-        .upload(filePath, compressedFile);
+        .upload(filePath, file);
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
@@ -251,7 +195,7 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
           </div>
         )}
         
-        <div className="flex items-center justify-between gap-3 pt-1">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <input
               type="file"
