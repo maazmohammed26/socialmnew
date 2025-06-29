@@ -278,7 +278,7 @@ export function UserSearch() {
             {isCrimson ? (
               <CrimsonSearchInput
                 type="text"
-                placeholder="Find Friends"
+                placeholder="Search by name or username..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full font-pixelated text-xs h-8 transition-all duration-200"
@@ -293,7 +293,7 @@ export function UserSearch() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="Find Friends"
+                  placeholder="Search by name or username..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full font-pixelated text-xs h-8 pl-9 pr-9 transition-all duration-200 focus:ring-2 focus:ring-social-green"

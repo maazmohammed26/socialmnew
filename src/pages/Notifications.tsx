@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,7 +65,7 @@ export function Notifications() {
       // Create sample notifications if none exist
       const sampleNotifications = [
         {
-          id: 'theme-tip',
+          id: 'founder-message',
           user_id: user.id,
           type: 'system',
           content: "👋 Hello! I'm Mohammed Maaz A, the developer of SocialChat. This platform was created by me alone, so there might be some loading issues - please ignore them. Thank you for your support and patience!",
@@ -499,7 +500,7 @@ export function Notifications() {
               
               <div className="bg-muted/50 p-3 rounded-lg">
                 <p className="font-pixelated text-xs text-muted-foreground leading-relaxed">
-                  <strong>OneSignal Push Notifications:</strong> Get instant alerts on all devices and browsers, including macOS Safari!
+                  <strong>Browser Notifications:</strong> Get alerts when you're using SocialChat in your browser!
                 </p>
               </div>
               
