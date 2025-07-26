@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
@@ -12,7 +12,7 @@ interface CreatePostFormProps {
   onPostCreated?: () => void;
 }
 
-export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
+export const CreatePostForm = memo(function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -21,9 +21,19 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
   const { isOnline } = useOfflineMode();
   const { addOfflinePost } = useOfflinePosts();
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          variant: 'destructive',
+          title: 'File too large',
+          description: 'Please select an image smaller than 5MB'
+        });
+        return;
+      }
+      
       setImageFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -31,9 +41,9 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
       };
       reader.readAsDataURL(file);
     }
-  };
+  }, [toast]);
 
-  const uploadImage = async (file: File): Promise<string | null> => {
+  const uploadImage = useCallback(async (file: File): Promise<string | null> => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random()}.${fileExt}`;
@@ -57,9 +67,9 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
       console.error('Error uploading image:', error);
       return null;
     }
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!content.trim()) {
@@ -160,7 +170,7 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [content, imageFile, imagePreview, isOnline, addOfflinePost, uploadImage, onPostCreated, toast]);
 
   return (
     <Card className="p-4 mb-6">
@@ -179,6 +189,7 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
               src={imagePreview}
               alt="Preview"
               className="max-h-64 rounded-lg object-cover"
+              loading="lazy"
             />
             <Button
               type="button"
@@ -250,4 +261,4 @@ export function CreatePostForm({ onPostCreated }: CreatePostFormProps) {
       </form>
     </Card>
   );
-}
+});

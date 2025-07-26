@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { cn } from '@/lib/utils';
 
 interface LoadingScreenProps {
   className?: string;
 }
 
-export function LoadingScreen({ className }: LoadingScreenProps) {
+export const LoadingScreen = memo(function LoadingScreen({ className }: LoadingScreenProps) {
   // Check if we're in crimson theme
   const [isCrimson, setIsCrimson] = useState(false);
   
@@ -46,6 +46,8 @@ export function LoadingScreen({ className }: LoadingScreenProps) {
             "h-20 w-auto mx-auto",
             isCrimson ? "animate-pulse" : "animate-bounce"
           )}
+          loading="eager"
+          decoding="sync"
         />
         <div className="space-y-2">
           <h1 className={cn(
@@ -74,4 +76,4 @@ export function LoadingScreen({ className }: LoadingScreenProps) {
       </div>
     </div>
   );
-}
+});

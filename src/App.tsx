@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { clearExpiredItems } from "@/lib/cache-utils";
 import { OfflineIndicator } from "@/components/ui/offline-indicator";
+import { memo } from "react";
 
 // Lazy-loaded pages for better performance
 const Index = lazy(() => import("./pages/Index"));
@@ -30,17 +31,28 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 // Components
 import { AuthGuard } from "./components/common/AuthGuard";
 
-// Create a client with performance optimizations
+// Create a client with aggressive performance optimizations
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // Data is fresh for 5 minutes
-      cacheTime: 1000 * 60 * 30, // Cache persists for 30 minutes
+      staleTime: 1000 * 60 * 10, // Data is fresh for 10 minutes
+      cacheTime: 1000 * 60 * 60, // Cache persists for 1 hour
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: 0, // Disable retries for faster response
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+    },
+    mutations: {
+      retry: 0,
     },
   },
 });
+
+// Memoized loading screen for better performance
+const MemoizedLoadingScreen = memo(LoadingScreen);
+
+// Memoized offline indicator
+const MemoizedOfflineIndicator = memo(OfflineIndicator);
 
 const App = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -120,7 +132,7 @@ const App = () => {
       console.log('Initial session check:', session?.user?.id);
       setSession(session);
       // Add a small delay to show the loading animation
-      setTimeout(() => setLoading(false), 1000);
+      setTimeout(() => setLoading(false), 300);
     });
 
     return () => {
@@ -129,7 +141,7 @@ const App = () => {
   }, []);
   
   if (loading) {
-    return <LoadingScreen />;
+    return <MemoizedLoadingScreen />;
   }
 
   // Check if we're in crimson theme
@@ -143,7 +155,7 @@ const App = () => {
           <Sonner />
           <ErrorBoundary>
             <BrowserRouter>
-              <Suspense fallback={<LoadingScreen />}>
+              <Suspense fallback={<MemoizedLoadingScreen />}>
                 <Routes>
                   {/* Public Routes */}
                   <Route 
@@ -221,7 +233,7 @@ const App = () => {
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
-              <OfflineIndicator />
+              <MemoizedOfflineIndicator />
             </BrowserRouter>
           </ErrorBoundary>
         </TooltipProvider>

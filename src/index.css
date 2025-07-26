@@ -778,6 +778,9 @@ textarea, input {
   overflow-x: hidden;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
+  /* GPU acceleration for better performance */
+  transform: translateZ(0);
+  will-change: scroll-position;
 }
 
 /* Enhanced scrollbar with theme colors */
@@ -802,6 +805,77 @@ textarea, input {
   opacity: 1;
 }
 
+/* Performance optimizations */
+.card-hover {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+.btn-hover-lift {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+.animate-fade-in {
+  will-change: opacity, transform;
+}
+
+/* Lazy loading styles */
+.lazy {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.lazy.loaded {
+  opacity: 1;
+}
+
+/* Optimize font rendering */
+.font-pixelated {
+  text-rendering: optimizeSpeed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* GPU acceleration for animations */
+@keyframes fadeIn {
+  from { 
+    opacity: 0; 
+    transform: translate3d(0, 10px, 0); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translate3d(0, 0, 0); 
+  }
+}
+
+/* Optimize image loading */
+img {
+  content-visibility: auto;
+  contain-intrinsic-size: 300px 200px;
+}
+
+/* Optimize large lists */
+.virtual-list {
+  contain: layout style paint;
+  content-visibility: auto;
+}
+
+/* Reduce paint operations */
+.card-gradient {
+  contain: layout style paint;
+}
+
+/* Optimize transforms */
+.hover-scale {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Critical CSS inlining hint */
+.critical {
+  contain: layout style paint;
+}
 /* Crimson theme scrollbar */
 .crimson .scroll-container::-webkit-scrollbar-thumb {
   background: hsl(0, 70%, 40%);

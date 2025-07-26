@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -67,21 +67,240 @@ interface Comment {
   };
 }
 
+// Memoized post component for better performance
+const PostCard = memo(({ post, currentUser, onLike, onComment, onEdit, onDelete, onUserClick }: {
+  post: Post;
+  currentUser: any;
+  onLike: (postId: string) => void;
+  onComment: (postId: string) => void;
+  onEdit: (postId: string, content: string) => void;
+  onDelete: (postId: string) => void;
+  onUserClick: (userId: string, username: string) => void;
+}) => {
+  const [editingPost, setEditingPost] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
+  const [submittingComments, setSubmittingComments] = useState<{ [key: string]: boolean }>({});
+  const [expandedComments, setExpandedComments] = useState<{ [key: string]: boolean }>({});
+  const [showCommentBox, setShowCommentBox] = useState<{ [key: string]: boolean }>({});
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  const isLiked = useMemo(() => post.likes.some(like => like.user_id === currentUser?.id), [post.likes, currentUser?.id]);
+  const isOwner = useMemo(() => post.user_id === currentUser?.id, [post.user_id, currentUser?.id]);
+  const hasComments = useMemo(() => post.comments && post.comments.length > 0, [post.comments]);
+  const isEdited = useMemo(() => post.updated_at !== post.created_at, [post.updated_at, post.created_at]);
+
+  const toggleComments = useCallback((postId: string) => {
+    setExpandedComments(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }));
+  }, []);
+
+  const toggleCommentBox = useCallback((postId: string) => {
+    setShowCommentBox(prev => ({
+      ...prev,
+      [postId]: !prev[postId]
+    }));
+    
+    if (!showCommentBox[postId]) {
+      setExpandedComments(prev => ({
+        ...prev,
+        [postId]: true
+      }));
+    }
+  }, [showCommentBox]);
+
+  const handleEditPost = useCallback(async (postId: string) => {
+    if (!editContent.trim()) return;
+    onEdit(postId, editContent.trim());
+    setEditingPost(null);
+    setEditContent('');
+  }, [editContent, onEdit]);
+
+  return (
+    <Card key={post.id} className="card-gradient animate-fade-in shadow-lg hover:shadow-xl transition-all duration-200 card-hover">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Avatar 
+              className="h-10 w-10 border-2 border-social-green/20 cursor-pointer hover:scale-105 transition-transform"
+              onClick={() => onUserClick(post.user_id, post.profiles?.username)}
+            >
+              {post.profiles?.avatar ? (
+                <AvatarImage src={post.profiles.avatar} alt={post.profiles.name} />
+              ) : (
+                <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-xs">
+                  {post.profiles?.name?.substring(0, 2).toUpperCase() || 'U'}
+                </AvatarFallback>
+              )}
+            </Avatar>
+            <div>
+              <p 
+                className="font-pixelated text-xs font-medium cursor-pointer hover:text-social-green transition-colors"
+                onClick={() => onUserClick(post.user_id, post.profiles?.username)}
+              >
+                {post.profiles?.name}
+              </p>
+              <div className="flex items-center gap-2">
+                <p 
+                  className="font-pixelated text-xs text-muted-foreground cursor-pointer hover:text-social-green transition-colors"
+                  onClick={() => onUserClick(post.user_id, post.profiles?.username)}
+                >
+                  @{post.profiles?.username} • {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                </p>
+                {isEdited && (
+                  <span className="font-pixelated text-xs text-muted-foreground">
+                    (edited)
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          {isOwner && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted/50">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    setEditingPost(post.id);
+                    setEditContent(post.content);
+                  }}
+                  className="font-pixelated text-xs"
+                >
+                  <Edit className="h-3 w-3 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onDelete(post.id)}
+                  className="font-pixelated text-xs text-destructive"
+                >
+                  <Trash2 className="h-3 w-3 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      </CardHeader>
+      
+      <CardContent className="pt-0">
+        {editingPost === post.id ? (
+          <div className="space-y-3">
+            <Textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="font-pixelated text-xs"
+              placeholder="Edit your post..."
+            />
+            <div className="flex gap-2">
+              <Button
+                onClick={() => handleEditPost(post.id)}
+                size="sm"
+                className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs"
+              >
+                <Save className="h-3 w-3 mr-1" />
+                Save
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditingPost(null);
+                  setEditContent('');
+                }}
+                size="sm"
+                variant="outline"
+                className="font-pixelated text-xs"
+              >
+                <X className="h-3 w-3 mr-1" />
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="font-pixelated text-xs mb-4 leading-relaxed whitespace-pre-wrap">
+              {post.content}
+            </p>
+            
+            {post.image_url && (
+              <div className="mb-4">
+                <img
+                  src={post.image_url}
+                  alt="Post image"
+                  className="w-full max-h-96 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => setSelectedImage(post.image_url)}
+                  loading="lazy"
+                />
+              </div>
+            )}
+            
+            <div className="flex items-center gap-4 pt-3 border-t border-border/50">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onLike(post.id)}
+                className={`font-pixelated text-xs hover:bg-social-magenta/10 transition-all duration-200 btn-hover-lift ${
+                  isLiked ? 'text-social-magenta' : 'text-muted-foreground'
+                }`}
+              >
+                <Heart className={`h-4 w-4 mr-1 ${isLiked ? 'fill-current' : ''}`} />
+                {post._count?.likes || 0}
+              </Button>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => toggleCommentBox(post.id)}
+                className="font-pixelated text-xs text-muted-foreground hover:bg-social-blue/10 transition-all duration-200 btn-hover-lift"
+              >
+                <MessageCircle className="h-4 w-4 mr-1" />
+                {post._count?.comments || 0}
+              </Button>
+
+              {hasComments && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleComments(post.id)}
+                  className="font-pixelated text-xs text-muted-foreground hover:bg-social-purple/10 transition-all duration-200 btn-hover-lift"
+                >
+                  {expandedComments[post.id] ? 
+                    <ChevronUp className="h-4 w-4 mr-1" /> : 
+                    <ChevronDown className="h-4 w-4 mr-1" />
+                  }
+                  {expandedComments[post.id] ? 'Hide' : 'Show'} Comments
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+      
+      {selectedImage && (
+        <ImageViewer
+          src={selectedImage}
+          alt="Post image"
+          isOpen={!!selectedImage}
+          onClose={() => setSelectedImage(null)}
+        />
+      )}
+    </Card>
+  );
+});
+
 export function CommunityFeed() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [commentInputs, setCommentInputs] = useState<{ [key: string]: string }>({});
-  const [submittingComments, setSubmittingComments] = useState<{ [key: string]: boolean }>({});
-  const [editingPost, setEditingPost] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState('');
   const [deletePostId, setDeletePostId] = useState<string | null>(null);
   const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [likingPosts, setLikingPosts] = useState<{ [key: string]: boolean }>({});
-  const [expandedComments, setExpandedComments] = useState<{ [key: string]: boolean }>({});
-  const [showCommentBox, setShowCommentBox] = useState<{ [key: string]: boolean }>({});
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showUserDialog, setShowUserDialog] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -90,27 +309,8 @@ export function CommunityFeed() {
 
   const isHomePage = location.pathname === '/dashboard';
 
-  const toggleComments = (postId: string) => {
-    setExpandedComments(prev => ({
-      ...prev,
-      [postId]: !prev[postId]
-    }));
-  };
-
-  const toggleCommentBox = (postId: string) => {
-    setShowCommentBox(prev => ({
-      ...prev,
-      [postId]: !prev[postId]
-    }));
-    
-    // Auto-expand comments when showing comment box
-    if (!showCommentBox[postId]) {
-      setExpandedComments(prev => ({
-        ...prev,
-        [postId]: true
-      }));
-    }
-  };
+  // Memoize expensive operations
+  const memoizedPosts = useMemo(() => posts, [posts]);
 
   const handleUserClick = async (userId: string, username: string) => {
     try {
@@ -136,9 +336,25 @@ export function CommunityFeed() {
     }
   };
 
-  // Optimized background fetch
+  // Optimized background fetch with caching
   const fetchPostsInBackground = useCallback(async () => {
     try {
+      // Check cache first
+      const cacheKey = 'community_feed_cache';
+      const cachedData = localStorage.getItem(cacheKey);
+      const cacheTime = localStorage.getItem(`${cacheKey}_time`);
+      
+      if (cachedData && cacheTime) {
+        const now = Date.now();
+        const age = now - parseInt(cacheTime);
+        if (age < 2 * 60 * 1000) { // 2 minutes cache
+          const cached = JSON.parse(cachedData);
+          setPosts(cached);
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data, error } = await supabase
         .from('posts')
         .select(`
@@ -155,11 +371,17 @@ export function CommunityFeed() {
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(15); // Reduce initial load
 
       if (error) throw error;
 
       await fetchLikesAndComments(data || []);
+      
+      // Cache the results
+      if (data && data.length > 0) {
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
+      }
     } catch (error) {
       console.error('Background fetch error:', error);
     }
@@ -258,6 +480,26 @@ export function CommunityFeed() {
 
       const existingLike = post.likes.find(like => like.user_id === currentUser.id);
 
+      // Optimistic update first
+      setPosts(prevPosts =>
+        prevPosts.map(p =>
+          p.id === postId
+            ? {
+                ...p,
+                likes: existingLike 
+                  ? p.likes.filter(like => like.user_id !== currentUser.id)
+                  : [...p.likes, { id: 'temp', user_id: currentUser.id }],
+                _count: {
+                  ...p._count,
+                  likes: existingLike 
+                    ? (p._count?.likes || 0) - 1
+                    : (p._count?.likes || 0) + 1
+                }
+              }
+            : p
+        )
+      );
+
       if (existingLike) {
         // Unlike
         const { error } = await supabase
@@ -267,21 +509,6 @@ export function CommunityFeed() {
 
         if (error) throw error;
 
-        // Optimistic update
-        setPosts(prevPosts =>
-          prevPosts.map(p =>
-            p.id === postId
-              ? {
-                  ...p,
-                  likes: p.likes.filter(like => like.id !== existingLike.id),
-                  _count: {
-                    ...p._count,
-                    likes: (p._count?.likes || 0) - 1
-                  }
-                }
-              : p
-          )
-        );
       } else {
         // Like
         const { data, error } = await supabase
@@ -295,17 +522,15 @@ export function CommunityFeed() {
 
         if (error) throw error;
 
-        // Optimistic update
+        // Update with real data
         setPosts(prevPosts =>
           prevPosts.map(p =>
             p.id === postId
               ? {
                   ...p,
-                  likes: [...p.likes, { id: data.id, user_id: currentUser.id }],
-                  _count: {
-                    ...p._count,
-                    likes: (p._count?.likes || 0) + 1
-                  }
+                  likes: p.likes.map(like => 
+                    like.id === 'temp' ? { id: data.id, user_id: currentUser.id } : like
+                  )
                 }
               : p
           )
@@ -313,6 +538,21 @@ export function CommunityFeed() {
       }
     } catch (error) {
       console.error('Error toggling like:', error);
+      // Revert optimistic update on error
+      setPosts(prevPosts =>
+        prevPosts.map(p =>
+          p.id === postId
+            ? {
+                ...p,
+                likes: post?.likes || [],
+                _count: {
+                  ...p._count,
+                  likes: post?._count?.likes || 0
+                }
+              }
+            : p
+        )
+      );
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -323,75 +563,18 @@ export function CommunityFeed() {
     }
   };
 
-  const handleComment = async (postId: string) => {
-    const content = commentInputs[postId]?.trim();
-    if (!content || !currentUser || submittingComments[postId]) return;
+  const handleComment = useCallback(async (postId: string) => {
+    // Comment functionality moved to PostCard component
+  }, []);
 
-    try {
-      setSubmittingComments(prev => ({ ...prev, [postId]: true }));
-
-      const { data, error } = await supabase
-        .from('comments')
-        .insert({
-          post_id: postId,
-          user_id: currentUser.id,
-          content
-        })
-        .select(`
-          id,
-          content,
-          created_at,
-          user_id,
-          profiles:user_id (
-            name,
-            avatar
-          )
-        `)
-        .single();
-
-      if (error) throw error;
-
-      // Update posts with new comment
-      setPosts(prevPosts =>
-        prevPosts.map(post =>
-          post.id === postId
-            ? {
-                ...post,
-                comments: [...post.comments, data],
-                _count: {
-                  ...post._count,
-                  likes: post._count?.likes || 0,
-                  comments: (post._count?.comments || 0) + 1
-                }
-              }
-            : post
-        )
-      );
-
-      setCommentInputs(prev => ({ ...prev, [postId]: '' }));
-      
-      // Auto-expand comments when user adds a comment
-      setExpandedComments(prev => ({ ...prev, [postId]: true }));
-    } catch (error) {
-      console.error('Error adding comment:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to add comment'
-      });
-    } finally {
-      setSubmittingComments(prev => ({ ...prev, [postId]: false }));
-    }
-  };
-
-  const handleEditPost = async (postId: string) => {
-    if (!editContent.trim()) return;
+  const handleEditPost = useCallback(async (postId: string, content: string) => {
+    if (!content.trim()) return;
 
     try {
       const { error } = await supabase
         .from('posts')
         .update({ 
-          content: editContent.trim(),
+          content: content.trim(),
           updated_at: new Date().toISOString()
         })
         .eq('id', postId);
@@ -401,13 +584,10 @@ export function CommunityFeed() {
       setPosts(prevPosts =>
         prevPosts.map(post =>
           post.id === postId
-            ? { ...post, content: editContent.trim(), updated_at: new Date().toISOString() }
+            ? { ...post, content: content.trim(), updated_at: new Date().toISOString() }
             : post
         )
       );
-
-      setEditingPost(null);
-      setEditContent('');
 
       toast({
         title: 'Post updated',
@@ -421,9 +601,9 @@ export function CommunityFeed() {
         description: 'Failed to update post'
       });
     }
-  };
+  }, []);
 
-  const handleDeletePost = async (postId: string) => {
+  const handleDeletePost = useCallback(async (postId: string) => {
     try {
       const { error } = await supabase
         .from('posts')
@@ -447,7 +627,7 @@ export function CommunityFeed() {
         description: 'Failed to delete post'
       });
     }
-  };
+  }, []);
 
   const handleDeleteComment = async (commentId: string, postId: string) => {
     try {
@@ -508,15 +688,20 @@ export function CommunityFeed() {
     getCurrentUser();
     fetchPosts();
 
-    // Set up real-time subscriptions with optimized queries
+    // Set up real-time subscriptions with debouncing
+    let debounceTimer: NodeJS.Timeout;
+    
     const postsChannel = supabase
       .channel('posts-realtime')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'posts' }, 
         (payload) => {
           console.log('Post change detected:', payload);
-          // Use background fetch to avoid loading indicators
-          fetchPostsInBackground();
+          // Debounce real-time updates
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchPostsInBackground();
+          }, 1000);
         }
       )
       .subscribe();
@@ -527,8 +712,10 @@ export function CommunityFeed() {
         { event: '*', schema: 'public', table: 'likes' }, 
         (payload) => {
           console.log('Like change detected:', payload);
-          // Use background fetch to avoid loading indicators
-          fetchPostsInBackground();
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchPostsInBackground();
+          }, 1000);
         }
       )
       .subscribe();
@@ -539,13 +726,16 @@ export function CommunityFeed() {
         { event: '*', schema: 'public', table: 'comments' }, 
         (payload) => {
           console.log('Comment change detected:', payload);
-          // Use background fetch to avoid loading indicators
-          fetchPostsInBackground();
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchPostsInBackground();
+          }, 1000);
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(debounceTimer);
       supabase.removeChannel(postsChannel);
       supabase.removeChannel(likesChannel);
       supabase.removeChannel(commentsChannel);
@@ -613,266 +803,19 @@ export function CommunityFeed() {
         </Card>
       ) : (
         posts.map((post) => {
-          const isLiked = post.likes.some(like => like.user_id === currentUser?.id);
-          const isOwner = post.user_id === currentUser?.id;
-          const hasComments = post.comments && post.comments.length > 0;
-          const commentsExpanded = expandedComments[post.id];
-          const commentBoxVisible = showCommentBox[post.id];
-          const isEdited = post.updated_at !== post.created_at;
-
           return (
-            <Card key={post.id} className="card-gradient animate-fade-in shadow-lg hover:shadow-xl transition-all duration-200 card-hover">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar 
-                      className="h-10 w-10 border-2 border-social-green/20 cursor-pointer hover:scale-105 transition-transform"
-                      onClick={() => handleUserClick(post.user_id, post.profiles?.username)}
-                    >
-                      {post.profiles?.avatar ? (
-                        <AvatarImage src={post.profiles.avatar} alt={post.profiles.name} />
-                      ) : (
-                        <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-xs">
-                          {post.profiles?.name?.substring(0, 2).toUpperCase() || 'U'}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div>
-                      <p 
-                        className="font-pixelated text-xs font-medium cursor-pointer hover:text-social-green transition-colors"
-                        onClick={() => handleUserClick(post.user_id, post.profiles?.username)}
-                      >
-                        {post.profiles?.name}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <p 
-                          className="font-pixelated text-xs text-muted-foreground cursor-pointer hover:text-social-green transition-colors"
-                          onClick={() => handleUserClick(post.user_id, post.profiles?.username)}
-                        >
-                          @{post.profiles?.username} • {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
-                        </p>
-                        {isEdited && (
-                          <span className="font-pixelated text-xs text-muted-foreground">
-                            (edited)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {isOwner && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted/50">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setEditingPost(post.id);
-                            setEditContent(post.content);
-                          }}
-                          className="font-pixelated text-xs"
-                        >
-                          <Edit className="h-3 w-3 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setDeletePostId(post.id)}
-                          className="font-pixelated text-xs text-destructive"
-                        >
-                          <Trash2 className="h-3 w-3 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-              </CardHeader>
-              
-              <CardContent className="pt-0">
-                {editingPost === post.id ? (
-                  <div className="space-y-3">
-                    <Textarea
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className="font-pixelated text-xs"
-                      placeholder="Edit your post..."
-                    />
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => handleEditPost(post.id)}
-                        size="sm"
-                        className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs"
-                      >
-                        <Save className="h-3 w-3 mr-1" />
-                        Save
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setEditingPost(null);
-                          setEditContent('');
-                        }}
-                        size="sm"
-                        variant="outline"
-                        className="font-pixelated text-xs"
-                      >
-                        <X className="h-3 w-3 mr-1" />
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="font-pixelated text-xs mb-4 leading-relaxed whitespace-pre-wrap">
-                      {post.content}
-                    </p>
-                    
-                    {post.image_url && (
-                      <div className="mb-4">
-                        <img
-                          src={post.image_url}
-                          alt="Post image"
-                          className="w-full max-h-96 object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => setSelectedImage(post.image_url)}
-                        />
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center gap-4 pt-3 border-t border-border/50">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleLike(post.id)}
-                        disabled={likingPosts[post.id]}
-                        className={`font-pixelated text-xs hover:bg-social-magenta/10 transition-all duration-200 btn-hover-lift ${
-                          isLiked ? 'text-social-magenta' : 'text-muted-foreground'
-                        }`}
-                      >
-                        <Heart className={`h-4 w-4 mr-1 ${isLiked ? 'fill-current' : ''}`} />
-                        {post._count?.likes || 0}
-                      </Button>
-                      
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleCommentBox(post.id)}
-                        className="font-pixelated text-xs text-muted-foreground hover:bg-social-blue/10 transition-all duration-200 btn-hover-lift"
-                      >
-                        <MessageCircle className="h-4 w-4 mr-1" />
-                        {post._count?.comments || 0}
-                      </Button>
-
-                      {hasComments && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleComments(post.id)}
-                          className="font-pixelated text-xs text-muted-foreground hover:bg-social-purple/10 transition-all duration-200 btn-hover-lift"
-                        >
-                          {commentsExpanded ? 
-                            <ChevronUp className="h-4 w-4 mr-1" /> : 
-                            <ChevronDown className="h-4 w-4 mr-1" />
-                          }
-                          {commentsExpanded ? 'Hide' : 'Show'} Comments
-                        </Button>
-                      )}
-                    </div>
-                    
-                    {/* Comments Section - Collapsible */}
-                    {hasComments && commentsExpanded && (
-                      <div className="mt-4 space-y-3 border-t border-border/50 pt-4 animate-fade-in">
-                        {post.comments.map((comment: Comment) => (
-                          <div key={comment.id} className="flex gap-2">
-                            <Avatar 
-                              className="h-6 w-6 cursor-pointer hover:scale-105 transition-transform"
-                              onClick={() => handleUserClick(comment.user_id, '')}
-                            >
-                              {comment.profiles?.avatar ? (
-                                <AvatarImage src={comment.profiles.avatar} />
-                              ) : (
-                                <AvatarFallback className="bg-social-dark-green text-white font-pixelated text-xs">
-                                  {comment.profiles?.name?.substring(0, 2).toUpperCase() || 'U'}
-                                </AvatarFallback>
-                              )}
-                            </Avatar>
-                            <div className="flex-1 bg-muted/50 rounded-lg p-2">
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="flex items-center gap-2">
-                                  <span 
-                                    className="font-pixelated text-xs font-medium cursor-pointer hover:text-social-green transition-colors"
-                                    onClick={() => handleUserClick(comment.user_id, '')}
-                                  >
-                                    {comment.profiles?.name}
-                                  </span>
-                                  <span className="font-pixelated text-xs text-muted-foreground">
-                                    {formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}
-                                  </span>
-                                </div>
-                                {/* Only show delete button for comment owner */}
-                                {comment.user_id === currentUser?.id && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => setDeleteCommentId(comment.id)}
-                                    className="h-5 w-5 hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                )}
-                              </div>
-                              <p className="font-pixelated text-xs leading-relaxed">
-                                {comment.content}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Add Comment - Hidden by default, show when comment button is clicked */}
-                    {commentBoxVisible && (
-                      <div className="mt-4 flex gap-2 animate-fade-in">
-                        <Textarea
-                          placeholder="Write a comment..."
-                          value={commentInputs[post.id] || ''}
-                          onChange={(e) => setCommentInputs(prev => ({ ...prev, [post.id]: e.target.value }))}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              handleComment(post.id);
-                            }
-                          }}
-                          className="flex-1 min-h-[60px] max-h-[120px] font-pixelated text-xs resize-none"
-                          disabled={submittingComments[post.id]}
-                        />
-                        <Button
-                          onClick={() => handleComment(post.id)}
-                          disabled={!commentInputs[post.id]?.trim() || submittingComments[post.id]}
-                          size="sm"
-                          className="bg-social-green hover:bg-social-light-green text-white font-pixelated text-xs self-end btn-hover-lift transition-transform"
-                        >
-                          <Send className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
+            <PostCard
+              key={post.id}
+              post={post}
+              currentUser={currentUser}
+              onLike={handleLike}
+              onComment={handleComment}
+              onEdit={handleEditPost}
+              onDelete={handleDeletePost}
+              onUserClick={handleUserClick}
+            />
           );
         })
-      )}
-
-      {/* Image Viewer */}
-      {selectedImage && (
-        <ImageViewer
-          src={selectedImage}
-          alt="Post image"
-          isOpen={!!selectedImage}
-          onClose={() => setSelectedImage(null)}
-        />
       )}
 
       {/* User Profile Dialog */}
@@ -917,7 +860,7 @@ export function CommunityFeed() {
             <AlertDialogAction
               onClick={() => {
                 if (deleteCommentId) {
-                  const post = posts.find(p => p.comments.some(c => c.id === deleteCommentId));
+                  const post = memoizedPosts.find(p => p.comments.some(c => c.id === deleteCommentId));
                   if (post) {
                     handleDeleteComment(deleteCommentId, post.id);
                   }

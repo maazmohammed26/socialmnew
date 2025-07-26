@@ -37,9 +37,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
-    <!-- Preload critical resources -->
+    <!-- Preload critical resources for performance -->
     <link rel="preload" href="/src/index.css" as="style" />
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" as="style" />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" as="style" />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" as="style" />
+    <link rel="preload" href="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" as="image" />
+    
+    <!-- DNS prefetch for external resources -->
+    <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="//cdn.onesignal.com" />
+    <link rel="dns-prefetch" href="//www.gstatic.com" />
+    
+    <!-- Preconnect to critical origins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://jhppdxxamrvayvpruwde.supabase.co" crossorigin />
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/lovable-uploads/d215e62c-d97d-4600-a98e-68acbeba47d0.png" />
@@ -92,6 +104,7 @@
         const script = document.createElement('script');
         script.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
         script.defer = true;
+        script.async = true;
         document.head.appendChild(script);
         
         window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -149,11 +162,18 @@
         -webkit-text-size-adjust: 100%;
         -ms-text-size-adjust: 100%;
         text-size-adjust: 100%;
+        /* Performance optimizations */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeSpeed;
       }
       
       /* Prevent double-tap zoom */
       * {
         touch-action: manipulation;
+        /* GPU acceleration for better performance */
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
       }
       
       /* Allow text selection for inputs and textareas */
@@ -163,14 +183,53 @@
         -ms-user-select: text;
         user-select: text;
       }
+      
+      /* Critical CSS for above-the-fold content */
+      .critical-loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+        z-index: 9999;
+      }
+      
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e5e7eb;
+        border-top: 3px solid #22c55e;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
     </style>
   </head>
 
   <body>
+    <!-- Critical loading indicator -->
+    <div id="critical-loading" class="critical-loading">
+      <div class="loading-spinner"></div>
+    </div>
+    
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
     <script>
+      // Remove critical loading indicator when app loads
+      window.addEventListener('load', function() {
+        const loader = document.getElementById('critical-loading');
+        if (loader) {
+          loader.style.opacity = '0';
+          setTimeout(() => loader.remove(), 300);
+        }
+      });
+      
       // Additional zoom prevention
       document.addEventListener('gesturestart', function (e) {
         e.preventDefault();
@@ -203,6 +262,16 @@
         }
         lastTouchTime = now;
       });
+      
+      // Performance monitoring
+      if ('performance' in window) {
+        window.addEventListener('load', function() {
+          setTimeout(function() {
+            const perfData = performance.getEntriesByType('navigation')[0];
+            console.log('Page load time:', perfData.loadEventEnd - perfData.fetchStart, 'ms');
+          }, 0);
+        });
+      }
     </script>
   </body>
 </html>
