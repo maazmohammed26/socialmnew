@@ -809,15 +809,18 @@ textarea, input {
 .card-hover {
   will-change: transform;
   transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .btn-hover-lift {
   will-change: transform;
   transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .animate-fade-in {
   will-change: opacity, transform;
+  backface-visibility: hidden;
 }
 
 /* Lazy loading styles */
@@ -835,6 +838,7 @@ textarea, input {
   text-rendering: optimizeSpeed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-display: swap;
 }
 
 /* GPU acceleration for animations */
@@ -853,6 +857,9 @@ textarea, input {
 img {
   content-visibility: auto;
   contain-intrinsic-size: 300px 200px;
+  image-rendering: auto;
+  image-rendering: crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
 }
 
 /* Optimize large lists */
@@ -864,12 +871,14 @@ img {
 /* Reduce paint operations */
 .card-gradient {
   contain: layout style paint;
+  will-change: transform;
 }
 
 /* Optimize transforms */
 .hover-scale {
   transform: translateZ(0);
   will-change: transform;
+  backface-visibility: hidden;
 }
 
 /* Critical CSS inlining hint */

@@ -66,7 +66,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="flex flex-1 w-full">
         <div className="flex-1 w-full">
           {!isMobile && (
-            <div className="border-b sticky top-0 bg-background z-10 px-2 pt-2">
+            <div className="border-b sticky top-0 bg-background/95 backdrop-blur-sm z-10 px-2 pt-2">
               <Tabs value={currentRoute} className="w-full mb-2">
                 <TabsList className="nav-tabs w-fit overflow-x-auto">
                   <TabsTrigger 
