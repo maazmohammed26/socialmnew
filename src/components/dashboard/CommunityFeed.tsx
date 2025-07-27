@@ -26,7 +26,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useLocation } from 'react-router-dom';
-import { Skeleton } from '@/components/ui/skeleton';
 
 interface Post {
   id: string;
@@ -57,15 +56,15 @@ interface Post {
   };
 }
 
-interface UserProfile {
+interface Comment {
   id: string;
-  name: string;
-  username: string;
-  avatar: string | null;
-  created_at?: string;
-  bio?: string;
-  location?: string;
-  website?: string;
+  content: string;
+  created_at: string;
+  user_id: string;
+  profiles: {
+    name: string;
+    avatar: string | null;
+  };
 }
 
 // Memoized post component for better performance
@@ -76,7 +75,7 @@ const PostCard = memo(({ post, currentUser, onLike, onComment, onEdit, onDelete,
   onComment: (postId: string) => void;
   onEdit: (postId: string, content: string) => void;
   onDelete: (postId: string) => void;
-  onUserClick: (userId: string, username: string, name: string, avatar: string | null) => void;
+  onUserClick: (userId: string, username: string) => void;
 }) => {
   const [editingPost, setEditingPost] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -119,11 +118,6 @@ const PostCard = memo(({ post, currentUser, onLike, onComment, onEdit, onDelete,
     setEditContent('');
   }, [editContent, onEdit]);
 
-  const handleUserClick = useCallback(() => {
-    if (post.profiles) {
-      onUserClick(post.user_id, post.profiles.username, post.profiles.name, post.profiles.avatar);
-    }
-  }, [post.user_id, post.profiles, onUserClick]);
   return (
     <Card key={post.id} className="card-gradient animate-fade-in shadow-lg hover:shadow-xl transition-all duration-200 card-hover">
       <CardHeader className="pb-3">
@@ -131,7 +125,7 @@ const PostCard = memo(({ post, currentUser, onLike, onComment, onEdit, onDelete,
           <div className="flex items-center gap-3">
             <Avatar 
               className="h-10 w-10 border-2 border-social-green/20 cursor-pointer hover:scale-105 transition-transform"
-              onClick={handleUserClick}
+              onClick={() => onUserClick(post.user_id, post.profiles?.username)}
             >
               {post.profiles?.avatar ? (
                 <AvatarImage src={post.profiles.avatar} alt={post.profiles.name} />
@@ -144,14 +138,14 @@ const PostCard = memo(({ post, currentUser, onLike, onComment, onEdit, onDelete,
             <div>
               <p 
                 className="font-pixelated text-xs font-medium cursor-pointer hover:text-social-green transition-colors"
-                onClick={handleUserClick}
+                onClick={() => onUserClick(post.user_id, post.profiles?.username)}
               >
                 {post.profiles?.name}
               </p>
               <div className="flex items-center gap-2">
                 <p 
                   className="font-pixelated text-xs text-muted-foreground cursor-pointer hover:text-social-green transition-colors"
-                  onClick={handleUserClick}
+                  onClick={() => onUserClick(post.user_id, post.profiles?.username)}
                 >
                   @{post.profiles?.username} • {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
                 </p>
@@ -299,24 +293,6 @@ const PostCard = memo(({ post, currentUser, onLike, onComment, onEdit, onDelete,
   );
 });
 
-// Optimized loading skeleton component
-const PostSkeleton = memo(() => (
-  <Card className="animate-pulse">
-    <CardHeader className="pb-3">
-      <div className="flex items-center gap-3">
-        <Skeleton className="h-10 w-10 rounded-full" />
-        <div className="flex-1">
-          <Skeleton className="h-4 w-24 mb-2" />
-          <Skeleton className="h-3 w-16" />
-        </div>
-      </div>
-    </CardHeader>
-    <CardContent>
-      <Skeleton className="h-4 w-full mb-2" />
-      <Skeleton className="h-4 w-3/4" />
-    </CardContent>
-  </Card>
-));
 export function CommunityFeed() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -325,9 +301,8 @@ export function CommunityFeed() {
   const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [likingPosts, setLikingPosts] = useState<{ [key: string]: boolean }>({});
-  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showUserDialog, setShowUserDialog] = useState(false);
-  const [loadingUser, setLoadingUser] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const { toast } = useToast();
@@ -337,35 +312,19 @@ export function CommunityFeed() {
   // Memoize expensive operations
   const memoizedPosts = useMemo(() => posts, [posts]);
 
-  const handleUserClick = useCallback(async (userId: string, username: string, name: string, avatar: string | null) => {
-    if (loadingUser) return; // Prevent multiple clicks
-    
+  const handleUserClick = async (userId: string, username: string) => {
     try {
-      setLoadingUser(true);
-      
-      // First, show the dialog with basic info immediately for better UX
-      const basicUserInfo: UserProfile = {
-        id: userId,
-        name: name,
-        username: username,
-        avatar: avatar
-      };
-      
-      setSelectedUser(basicUserInfo);
-      setShowUserDialog(true);
-      
-      // Then fetch additional profile data in the background
       const { data: userProfile, error } = await supabase
         .from('profiles')
-        .select('id, name, username, avatar, created_at, bio, location, website')
+        .select('id, name, username, avatar, created_at')
         .eq('id', userId)
         .single();
 
       if (error) throw error;
 
       if (userProfile) {
-        // Update with full profile data
         setSelectedUser(userProfile);
+        setShowUserDialog(true);
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
@@ -374,11 +333,8 @@ export function CommunityFeed() {
         title: 'Error',
         description: 'Failed to load user profile'
       });
-      setShowUserDialog(false);
-    } finally {
-      setLoadingUser(false);
     }
-  }, [loadingUser, toast]);
+  };
 
   // Optimized background fetch with caching
   const fetchPostsInBackground = useCallback(async () => {
@@ -391,7 +347,7 @@ export function CommunityFeed() {
       if (cachedData && cacheTime) {
         const now = Date.now();
         const age = now - parseInt(cacheTime);
-        if (age < 1 * 60 * 1000) { // 1 minute cache for faster updates
+        if (age < 2 * 60 * 1000) { // 2 minutes cache
           const cached = JSON.parse(cachedData);
           setPosts(cached);
           setLoading(false);
@@ -415,7 +371,7 @@ export function CommunityFeed() {
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(10); // Further reduce initial load for faster response
+        .limit(15); // Reduce initial load
 
       if (error) throw error;
 
@@ -798,7 +754,21 @@ export function CommunityFeed() {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map(i => (
-          <PostSkeleton key={i} />
+          <Card key={i} className="animate-pulse">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-muted" />
+                <div className="flex-1">
+                  <div className="h-4 w-24 bg-muted rounded mb-2" />
+                  <div className="h-3 w-16 bg-muted rounded" />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-4 w-full bg-muted rounded mb-2" />
+              <div className="h-4 w-3/4 bg-muted rounded" />
+            </CardContent>
+          </Card>
         ))}
       </div>
     );

@@ -16,7 +16,7 @@ export const STORES = {
 
 // Cache expiration times (in milliseconds)
 export const CACHE_EXPIRATION = {
-  POSTS: 2 * 60 * 1000, // 2 minutes for faster updates
+  POSTS: 5 * 60 * 1000, // 5 minutes
   PROFILES: 30 * 60 * 1000, // 30 minutes
   MESSAGES: 1 * 60 * 1000, // 1 minute
   GROUPS: 5 * 60 * 1000, // 5 minutes
