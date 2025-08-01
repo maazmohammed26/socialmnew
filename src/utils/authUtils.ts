@@ -48,15 +48,15 @@ export const registerUser = async (email: string, password: string, name: string
   }
 
   if (password.length < 6) {
-    throw new Error('Password must be at least 6 characters long');
+    throw new Error('Your password needs to be at least 6 characters long. Make it strong! 💪');
   }
 
   if (username.length < 3) {
-    throw new Error('Username must be at least 3 characters long');
+    throw new Error('Username should be at least 3 characters long. Make it memorable! ✨');
   }
 
   if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-    throw new Error('Username can only contain letters, numbers, and underscores');
+    throw new Error('Username can only contain letters, numbers, and underscores. Keep it simple and sweet! 🎯');
   }
 
   try {
@@ -76,13 +76,13 @@ export const registerUser = async (email: string, password: string, name: string
       
       // Handle specific error cases
       if (error.message.includes('already registered')) {
-        throw new Error('An account with this email already exists. Please try logging in instead.');
+        throw new Error('Great news! You already have an account with us. Ready to log in? 🎉');
       } else if (error.message.includes('password')) {
-        throw new Error('Password must be at least 6 characters long');
+        throw new Error('Your password needs more power! Make it at least 6 characters strong. 🔐');
       } else if (error.message.includes('email')) {
-        throw new Error('Please enter a valid email address');
+        throw new Error('That email doesn\'t look quite right. Double-check it for us! 📧');
       } else {
-        throw new Error(error.message || 'Registration failed. Please try again.');
+        throw new Error(error.message || 'Oops! Something went wrong. Let\'s try that again! 🔄');
       }
     }
 
@@ -117,15 +117,15 @@ export const loginUser = async (email: string, password: string) => {
       
       // Handle specific error cases
       if (error.message.includes('Invalid login credentials')) {
-        throw new Error('Invalid email or password. Please check your credentials and try again.');
+        throw new Error('Oops! That email and password combination doesn\'t match our records. Double-check and try again! 🔐');
       } else if (error.message.includes('Email not confirmed')) {
-        throw new Error('Please check your email and click the confirmation link before logging in.');
+        throw new Error('Almost there! Please check your email and click the confirmation link to activate your account. 📧');
       } else if (error.message.includes('Too many requests')) {
-        throw new Error('Too many login attempts. Please wait a few minutes and try again.');
+        throw new Error('Whoa there, speedy! Too many attempts. Take a coffee break and try again in a few minutes. ☕');
       } else if (error.message.includes('User not found')) {
-        throw new Error('No account found with this email address. Please sign up first.');
+        throw new Error('Hmm, we can\'t find an account with that email. Ready to join our community? Sign up! 🌟');
       } else {
-        throw new Error(error.message || 'Login failed. Please try again.');
+        throw new Error(error.message || 'Something went wrong on our end. Please try again! 🔄');
       }
     }
 

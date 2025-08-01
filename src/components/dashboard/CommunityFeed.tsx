@@ -125,7 +125,13 @@ const PostCard = memo(({ post, currentUser, onLike, onComment, onEdit, onDelete,
           <div className="flex items-center gap-3">
             <Avatar 
               className="h-10 w-10 border-2 border-social-green/20 cursor-pointer hover:scale-105 transition-transform"
-              onClick={() => onUserClick(post.user_id, post.profiles?.username)}
+              onClick={() => {
+                if (post.profiles?.username && post.user_id) {
+                  onUserClick(post.user_id, post.profiles.username);
+                } else {
+                  console.warn('Missing user data for profile click:', post);
+                }
+              }}
             >
               {post.profiles?.avatar ? (
                 <AvatarImage src={post.profiles.avatar} alt={post.profiles.name} />
@@ -138,14 +144,26 @@ const PostCard = memo(({ post, currentUser, onLike, onComment, onEdit, onDelete,
             <div>
               <p 
                 className="font-pixelated text-xs font-medium cursor-pointer hover:text-social-green transition-colors"
-                onClick={() => onUserClick(post.user_id, post.profiles?.username)}
+                onClick={() => {
+                  if (post.profiles?.username && post.user_id) {
+                    onUserClick(post.user_id, post.profiles.username);
+                  } else {
+                    console.warn('Missing user data for name click:', post);
+                  }
+                }}
               >
                 {post.profiles?.name}
               </p>
               <div className="flex items-center gap-2">
                 <p 
                   className="font-pixelated text-xs text-muted-foreground cursor-pointer hover:text-social-green transition-colors"
-                  onClick={() => onUserClick(post.user_id, post.profiles?.username)}
+                  onClick={() => {
+                    if (post.profiles?.username && post.user_id) {
+                      onUserClick(post.user_id, post.profiles.username);
+                    } else {
+                      console.warn('Missing user data for username click:', post);
+                    }
+                  }}
                 >
                   @{post.profiles?.username} • {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
                 </p>
@@ -314,6 +332,17 @@ export function CommunityFeed() {
 
   const handleUserClick = async (userId: string, username: string) => {
     try {
+      // Validate inputs
+      if (!userId || !username) {
+        console.error('Invalid user data:', { userId, username });
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Unable to load user profile. Please try again.'
+        });
+        return;
+      }
+
       const { data: userProfile, error } = await supabase
         .from('profiles')
         .select('id, name, username, avatar, created_at')
@@ -325,13 +354,15 @@ export function CommunityFeed() {
       if (userProfile) {
         setSelectedUser(userProfile);
         setShowUserDialog(true);
+      } else {
+        throw new Error('User profile not found');
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to load user profile'
+        description: 'Failed to load user profile. The user might not exist or there was a connection issue.'
       });
     }
   };
@@ -375,11 +406,19 @@ export function CommunityFeed() {
 
       if (error) throw error;
 
-      await fetchLikesAndComments(data || []);
+      // Validate post data before processing
+      const validPosts = (data || []).filter(post => 
+        post.user_id && 
+        post.profiles && 
+        post.profiles.username && 
+        post.profiles.name
+      );
+
+      await fetchLikesAndComments(validPosts);
       
       // Cache the results
-      if (data && data.length > 0) {
-        localStorage.setItem(cacheKey, JSON.stringify(data));
+      if (validPosts.length > 0) {
+        localStorage.setItem(cacheKey, JSON.stringify(validPosts));
         localStorage.setItem(`${cacheKey}_time`, Date.now().toString());
       }
     } catch (error) {

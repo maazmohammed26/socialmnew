@@ -58,20 +58,23 @@ export const LoadingScreen = memo(function LoadingScreen({ className }: LoadingS
           )}>
             SocialChat
           </h1>
-          <div className="flex items-center justify-center gap-1">
+          <div className="flex items-center justify-center gap-1 mt-2">
             <div className={cn(
-              "h-2 w-2 rounded-full animate-pulse delay-0",
+              "h-2 w-2 rounded-full animate-bounce delay-0",
               isCrimson ? "bg-red-500" : "bg-social-green"
             )}></div>
             <div className={cn(
-              "h-2 w-2 rounded-full animate-pulse delay-150",
+              "h-2 w-2 rounded-full animate-bounce delay-150",
               isCrimson ? "bg-red-500" : "bg-social-green"
             )}></div>
             <div className={cn(
-              "h-2 w-2 rounded-full animate-pulse delay-300",
+              "h-2 w-2 rounded-full animate-bounce delay-300",
               isCrimson ? "bg-red-500" : "bg-social-green"
             )}></div>
           </div>
+          <p className="text-xs text-muted-foreground font-pixelated mt-3 animate-pulse">
+            Loading your social world...
+          </p>
         </div>
       </div>
     </div>

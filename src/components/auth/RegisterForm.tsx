@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle, XCircle, User, Mail, Lock, Sparkles, Heart, Zap, Shield, Star } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { signInWithGoogle, registerUser } from '@/utils/authUtils';
 
@@ -22,8 +22,54 @@ export function RegisterForm() {
   const [usernameStatus, setUsernameStatus] = useState<'checking' | 'available' | 'taken' | 'invalid' | 'idle'>('idle');
   const [emailStatus, setEmailStatus] = useState<'checking' | 'available' | 'taken' | 'idle'>('idle');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [shakeError, setShakeError] = useState(false);
+  const [successAnimation, setSuccessAnimation] = useState(false);
+  const [funMessage, setFunMessage] = useState('');
+  const [showFunMessage, setShowFunMessage] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Fun messages for different scenarios
+  const funMessages = {
+    weakPassword: [
+      "🔐 Your password needs more muscle! Add some characters!",
+      "💪 Make your password stronger than a superhero!",
+      "🎯 Aim for at least 6 characters - you can do it!",
+      "🚀 Power up your password for maximum security!"
+    ],
+    usernameTaken: [
+      "🎭 That username is already starring in someone else's show!",
+      "🏃‍♂️ Someone beat you to that username! Try another one!",
+      "🎪 That username is already performing in our circus!",
+      "⭐ That username is taken, but you're still a star!"
+    ],
+    emailTaken: [
+      "📧 That email is already part of our family!",
+      "🎉 Good news: You already have an account! Try logging in!",
+      "🔄 That email is already registered - welcome back!",
+      "💌 Your email is already in our hearts (and database)!"
+    ],
+    success: [
+      "🎉 Welcome to the SocialChat family!",
+      "🚀 Account created! You're ready to blast off!",
+      "⭐ You're now officially awesome!",
+      "🎊 Success! Time to make some friends!"
+    ]
+  };
+
+  // Trigger animations
+  const triggerShakeAnimation = () => {
+    setShakeError(true);
+    setTimeout(() => setShakeError(false), 600);
+  };
+
+  const showRandomFunMessage = (type: keyof typeof funMessages) => {
+    const messages = funMessages[type];
+    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+    setFunMessage(randomMessage);
+    setShowFunMessage(true);
+    setTimeout(() => setShowFunMessage(false), 4000);
+  };
 
   // Check for auth state changes to handle Google redirect
   useEffect(() => {
@@ -139,6 +185,7 @@ export function RegisterForm() {
 
       if (usernameStatus === 'taken') {
         throw new Error('Username is already taken');
+        showRandomFunMessage('usernameTaken');
       }
 
       if (usernameStatus === 'invalid') {
@@ -147,6 +194,7 @@ export function RegisterForm() {
 
       if (emailStatus === 'taken') {
         throw new Error('An account with this email already exists. Please try logging in instead.');
+        showRandomFunMessage('emailTaken');
       }
 
       if (!acceptedTerms) {
@@ -157,6 +205,8 @@ export function RegisterForm() {
       const { user } = await registerUser(email, password, name, username);
 
       if (user) {
+        setSuccessAnimation(true);
+        showRandomFunMessage('success');
         setRegistrationSuccess(true);
         toast({
           title: 'Registration successful!',
@@ -165,6 +215,12 @@ export function RegisterForm() {
       }
     } catch (error: any) {
       console.error('Registration error:', error);
+      triggerShakeAnimation();
+      
+      if (error.message?.includes('Password must be at least 6 characters')) {
+        showRandomFunMessage('weakPassword');
+      }
+      
       toast({
         variant: 'destructive',
         title: 'Registration failed',
@@ -197,16 +253,20 @@ export function RegisterForm() {
 
   if (registrationSuccess) {
     return (
-      <Card className="w-full max-w-md mx-auto">
+      <Card className="w-full max-w-md mx-auto animate-success-bounce">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-pixelated social-gradient bg-clip-text text-transparent">
-            Check Your Email
+          <CardTitle className="text-2xl font-pixelated social-gradient bg-clip-text text-transparent animate-fade-in">
+            <div className="flex items-center justify-center gap-2">
+              <CheckCircle className="h-6 w-6 text-green-500 animate-bounce" />
+              Check Your Email
+              <Mail className="h-6 w-6 text-social-blue animate-pulse" />
+            </div>
           </CardTitle>
-          <CardDescription className="font-pixelated">
+          <CardDescription className="font-pixelated animate-slide-in-up">
             We've sent you a confirmation email
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 animate-fade-in">
           <div className="text-center space-y-2">
             <p className="font-pixelated text-sm text-muted-foreground">
               Please check your email inbox (and spam folder) for a confirmation link.
@@ -217,7 +277,7 @@ export function RegisterForm() {
           </div>
           <Button 
             onClick={() => navigate('/login')} 
-            className="w-full font-pixelated"
+            className="w-full font-pixelated transition-all duration-300 hover:scale-105 hover:shadow-lg"
           >
             Go to Login
           </Button>
@@ -227,35 +287,52 @@ export function RegisterForm() {
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className={`w-full max-w-md mx-auto transition-all duration-500 ${
+      shakeError ? 'animate-shake' : ''
+    } ${successAnimation ? 'animate-success-glow' : ''}`}>
       <CardHeader className="text-center">
-        <div className="bg-yellow-100 text-yellow-800 p-2 rounded-md mb-4">
+        <div className="bg-yellow-100 text-yellow-800 p-2 rounded-md mb-4 animate-bounce-gentle">
           <p className="font-pixelated text-xs">
+            <Zap className="inline h-3 w-3 mr-1 animate-pulse" />
             🚧 This project is under development. Some features may be limited or unavailable.
           </p>
         </div>
-        <CardTitle className="text-2xl font-pixelated social-gradient bg-clip-text text-transparent">
-          Create Account
+        <CardTitle className="text-2xl font-pixelated social-gradient bg-clip-text text-transparent animate-fade-in">
+          <div className="flex items-center justify-center gap-2">
+            <Star className="h-6 w-6 text-social-purple animate-spin-slow" />
+            Create Account
+            <Sparkles className="h-6 w-6 text-social-magenta animate-bounce" />
+          </div>
         </CardTitle>
-        <CardDescription className="font-pixelated">
+        <CardDescription className="font-pixelated animate-slide-in-up">
           Join our social community
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Fun Message Display */}
+        {showFunMessage && (
+          <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-3 mb-4 animate-bounce-in">
+            <div className="flex items-center gap-2">
+              <Heart className="h-4 w-4 text-purple-500 animate-pulse" />
+              <p className="font-pixelated text-sm text-purple-700">{funMessage}</p>
+            </div>
+          </div>
+        )}
+
         {/* Google Signup Button */}
         <Button
           onClick={handleGoogleSignup}
           disabled={googleLoading || loading}
           variant="outline"
-          className="w-full font-pixelated text-sm h-10 border-2 hover:bg-gray-50 transition-colors mb-4"
+          className="w-full font-pixelated text-sm h-10 border-2 hover:bg-gray-50 transition-all duration-300 hover:scale-105 hover:shadow-lg mb-4"
         >
           {googleLoading ? (
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+            <div className="flex items-center gap-2 animate-pulse">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin-fast" />
               Signing up with Google...
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 hover:gap-3 transition-all duration-200">
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -280,7 +357,10 @@ export function RegisterForm() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name" className="font-pixelated">Full Name</Label>
+            <Label htmlFor="name" className="font-pixelated flex items-center gap-2">
+              <User className="h-3 w-3" />
+              Full Name
+            </Label>
             <Input
               id="name"
               type="text"
@@ -288,13 +368,16 @@ export function RegisterForm() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="font-pixelated"
+              className="font-pixelated transition-all duration-200 focus:scale-105 focus:shadow-md"
               disabled={loading || googleLoading}
             />
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="username" className="font-pixelated">Username</Label>
+            <Label htmlFor="username" className="font-pixelated flex items-center gap-2">
+              <Shield className="h-3 w-3" />
+              Username
+            </Label>
             <div className="relative">
               <Input
                 id="username"
@@ -313,15 +396,15 @@ export function RegisterForm() {
                 disabled={loading || googleLoading}
               />
               {username.length >= 3 && (
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 transition-all duration-200">
                   {usernameStatus === 'checking' && (
-                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin-fast" />
                   )}
                   {usernameStatus === 'available' && (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <CheckCircle className="w-4 h-4 text-green-500 animate-bounce" />
                   )}
                   {(usernameStatus === 'taken' || usernameStatus === 'invalid') && (
-                    <XCircle className="w-4 h-4 text-red-500" />
+                    <XCircle className="w-4 h-4 text-red-500 animate-pulse" />
                   )}
                 </div>
               )}
@@ -342,7 +425,10 @@ export function RegisterForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email" className="font-pixelated">Email</Label>
+            <Label htmlFor="email" className="font-pixelated flex items-center gap-2">
+              <Mail className="h-3 w-3" />
+              Email
+            </Label>
             <div className="relative">
               <Input
                 id="email"
@@ -361,15 +447,15 @@ export function RegisterForm() {
                 disabled={loading || googleLoading}
               />
               {email.includes('@') && (
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 transition-all duration-200">
                   {emailStatus === 'checking' && (
-                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin-fast" />
                   )}
                   {emailStatus === 'available' && (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
+                    <CheckCircle className="w-4 h-4 text-green-500 animate-bounce" />
                   )}
                   {emailStatus === 'taken' && (
-                    <XCircle className="w-4 h-4 text-red-500" />
+                    <XCircle className="w-4 h-4 text-red-500 animate-pulse" />
                   )}
                 </div>
               )}
@@ -387,7 +473,10 @@ export function RegisterForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="font-pixelated">Password</Label>
+            <Label htmlFor="password" className="font-pixelated flex items-center gap-2">
+              <Lock className="h-3 w-3" />
+              Password
+            </Label>
             <div className="relative">
               <Input
                 id="password"
@@ -396,29 +485,39 @@ export function RegisterForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="font-pixelated pr-10"
+                className="font-pixelated pr-10 transition-all duration-200 focus:scale-105 focus:shadow-md"
                 disabled={loading || googleLoading}
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent hover:scale-110 transition-transform"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={loading || googleLoading}
               >
                 {showPassword ? (
-                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  <EyeOff className="h-4 w-4 text-muted-foreground animate-pulse" />
                 ) : (
                   <Eye className="h-4 w-4 text-muted-foreground" />
                 )}
               </Button>
             </div>
             {password.length > 0 && (
-              <p className={`font-pixelated text-xs ${
-                password.length >= 6 ? 'text-green-600' : 'text-red-600'
+              <p className={`font-pixelated text-xs transition-all duration-200 ${
+                password.length >= 6 ? 'text-green-600 animate-success-glow' : 'text-red-600 animate-pulse'
               }`}>
-                Password must be at least 6 characters
+                {password.length >= 6 ? (
+                  <span className="flex items-center gap-1">
+                    <CheckCircle className="h-3 w-3" />
+                    Password strength: Good!
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <XCircle className="h-3 w-3" />
+                    Password must be at least 6 characters
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -449,17 +548,27 @@ export function RegisterForm() {
 
           <Button 
             type="submit" 
-            className="w-full bg-social-green hover:bg-social-light-green text-white font-pixelated" 
+            className="w-full bg-social-green hover:bg-social-light-green text-white font-pixelated transition-all duration-300 hover:scale-105 hover:shadow-lg active:scale-95" 
             disabled={loading || googleLoading || usernameStatus === 'taken' || emailStatus === 'taken' || usernameStatus === 'checking' || emailStatus === 'checking' || usernameStatus === 'invalid' || !acceptedTerms}
           >
-            {loading ? 'Creating Account...' : 'Create Account'}
+            {loading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span className="animate-pulse">Creating Account...</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2">
+                <Star className="h-4 w-4" />
+                Create Account
+              </div>
+            )}
           </Button>
         </form>
 
         <div className="mt-6 text-center">
-          <p className="font-pixelated text-sm text-muted-foreground">
+          <p className="font-pixelated text-sm text-muted-foreground animate-fade-in">
             Already have an account?{' '}
-            <Link to="/login" className="text-social-green hover:underline">
+            <Link to="/login" className="text-social-green hover:underline hover:text-social-light-green transition-colors">
               Sign in
             </Link>
           </p>

@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from '@/hooks/use-toast';
 import { loginUser, signInWithGoogle } from '@/utils/authUtils';
 import { supabase } from '@/integrations/supabase/client';
-import { Eye, EyeOff, Mail } from 'lucide-react';
+import { Eye, EyeOff, Mail, AlertTriangle, CheckCircle, Zap, Heart, Sparkles, Lock, User } from 'lucide-react';
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
@@ -21,10 +21,41 @@ export function LoginForm() {
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [shakeError, setShakeError] = useState(false);
+  const [successAnimation, setSuccessAnimation] = useState(false);
+  const [funMessage, setFunMessage] = useState('');
+  const [showFunMessage, setShowFunMessage] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
 
+  // Fun error messages for wrong passwords
+  const funErrorMessages = [
+    "🤔 Hmm, that password seems to be playing hide and seek!",
+    "🔐 Your password is being a bit shy today...",
+    "🎭 Plot twist: That's not the right password!",
+    "🕵️ Password detective says: 'Not quite right!'",
+    "🎪 Oops! Your password went to the circus without you!",
+    "🚀 Houston, we have a password problem!",
+    "🎨 Your password is more creative than that!",
+    "🎵 That password doesn't match our tune!",
+    "🍕 Close, but no pizza... I mean password!",
+    "🎯 Almost there! Try again, you've got this!"
+  ];
+
+  // Trigger shake animation for errors
+  const triggerShakeAnimation = () => {
+    setShakeError(true);
+    setTimeout(() => setShakeError(false), 600);
+  };
+
+  // Show fun error message
+  const showRandomFunMessage = () => {
+    const randomMessage = funErrorMessages[Math.floor(Math.random() * funErrorMessages.length)];
+    setFunMessage(randomMessage);
+    setShowFunMessage(true);
+    setTimeout(() => setShowFunMessage(false), 4000);
+  };
   // Check for auth state changes to handle Google redirect
   useEffect(() => {
     const checkAuthState = async () => {
@@ -85,9 +116,13 @@ export function LoginForm() {
     } catch (error: any) {
       console.error('Login error:', error);
       
+      // Trigger fun animations for errors
+      triggerShakeAnimation();
+      
       // Provide specific error messages
       if (error.message?.includes('Invalid login credentials')) {
         setError('Invalid email or password. Please check your credentials and try again.');
+        showRandomFunMessage();
       } else if (error.message?.includes('Email not confirmed')) {
         setError('Please check your email and click the confirmation link before logging in.');
       } else if (error.message?.includes('Too many requests')) {
@@ -96,6 +131,7 @@ export function LoginForm() {
         setError('No account found with this email address. Please sign up first.');
       } else {
         setError('Login failed. Please check your email and password and try again.');
+        showRandomFunMessage();
       }
     } finally {
       setLoading(false);
@@ -106,6 +142,7 @@ export function LoginForm() {
     try {
       setGoogleLoading(true);
       setError('');
+      setSuccessAnimation(true);
 
       // Use the improved Google sign-in function
       await signInWithGoogle();
@@ -169,18 +206,35 @@ export function LoginForm() {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto">
+    <Card className={`w-full max-w-md mx-auto transition-all duration-500 ${
+      shakeError ? 'animate-shake' : ''
+    } ${successAnimation ? 'animate-success-glow' : ''}`}>
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold text-center font-pixelated social-gradient bg-clip-text text-transparent">
-          Welcome Back
+        <CardTitle className="text-2xl font-bold text-center font-pixelated social-gradient bg-clip-text text-transparent animate-fade-in">
+          <div className="flex items-center justify-center gap-2">
+            <Heart className="h-6 w-6 text-social-magenta animate-pulse" />
+            Welcome Back
+            <Sparkles className="h-6 w-6 text-social-purple animate-bounce" />
+          </div>
         </CardTitle>
-        <p className="text-center text-muted-foreground font-pixelated text-sm">
+        <p className="text-center text-muted-foreground font-pixelated text-sm animate-slide-in-up">
           Sign in to your SocialChat account
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Fun Message Display */}
+        {showFunMessage && (
+          <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-3 animate-bounce-in">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-orange-500 animate-spin" />
+              <p className="font-pixelated text-sm text-orange-700">{funMessage}</p>
+            </div>
+          </div>
+        )}
+
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="animate-shake-gentle border-l-4 border-l-red-500">
+            <AlertTriangle className="h-4 w-4 animate-pulse" />
             <AlertDescription className="font-pixelated text-sm">
               {error}
             </AlertDescription>
@@ -192,15 +246,15 @@ export function LoginForm() {
           onClick={handleGoogleLogin}
           disabled={googleLoading || loading}
           variant="outline"
-          className="w-full font-pixelated text-sm h-10 border-2 hover:bg-gray-50 transition-colors"
+          className="w-full font-pixelated text-sm h-10 border-2 hover:bg-gray-50 transition-all duration-300 hover:scale-105 hover:shadow-lg"
         >
           {googleLoading ? (
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+            <div className="flex items-center gap-2 animate-pulse">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin-fast" />
               Signing in with Google...
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 hover:gap-3 transition-all duration-200">
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                 <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -225,21 +279,27 @@ export function LoginForm() {
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email" className="font-pixelated">Email</Label>
+            <Label htmlFor="email" className="font-pixelated flex items-center gap-2">
+              <Mail className="h-3 w-3" />
+              Email
+            </Label>
             <Input
               id="email"
               type="email"
               placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="font-pixelated"
+              className="font-pixelated transition-all duration-200 focus:scale-105 focus:shadow-md"
               disabled={loading || googleLoading}
               autoComplete="email"
             />
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="password" className="font-pixelated">Password</Label>
+            <Label htmlFor="password" className="font-pixelated flex items-center gap-2">
+              <Lock className="h-3 w-3" />
+              Password
+            </Label>
             <div className="relative">
               <Input
                 id="password"
@@ -247,7 +307,7 @@ export function LoginForm() {
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="font-pixelated pr-10"
+                className="font-pixelated pr-10 transition-all duration-200 focus:scale-105 focus:shadow-md"
                 disabled={loading || googleLoading}
                 autoComplete="current-password"
               />
@@ -255,12 +315,12 @@ export function LoginForm() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent hover:scale-110 transition-transform"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={loading || googleLoading}
               >
                 {showPassword ? (
-                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  <EyeOff className="h-4 w-4 text-muted-foreground animate-pulse" />
                 ) : (
                   <Eye className="h-4 w-4 text-muted-foreground" />
                 )}
@@ -325,17 +385,27 @@ export function LoginForm() {
           
           <Button 
             type="submit" 
-            className="w-full btn-gradient font-pixelated"
+            className="w-full btn-gradient font-pixelated transition-all duration-300 hover:scale-105 hover:shadow-lg active:scale-95"
             disabled={loading || googleLoading}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span className="animate-pulse">Signing in...</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2">
+                <User className="h-4 w-4" />
+                Sign In
+              </div>
+            )}
           </Button>
         </form>
         
         <div className="text-center">
-          <p className="text-sm text-muted-foreground font-pixelated">
+          <p className="text-sm text-muted-foreground font-pixelated animate-fade-in">
             Don't have an account?{' '}
-            <Link to="/register" className="text-primary hover:underline font-medium">
+            <Link to="/register" className="text-primary hover:underline font-medium hover:text-social-green transition-colors">
               Sign up
             </Link>
           </p>
